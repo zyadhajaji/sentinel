@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-touch-fullscreen" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Sentinel" />
+    <meta name="description" content="Scanner-first. Non-custodial. Built for alpha." />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+    <title>Sentinel Terminal — Solana Trading Intelligence</title>
+    <script>
+      (function() {
+        var backendUrl = window.location.origin;
+        window.socketPreloaded = {};
+        ["/_multiplex", "/_heavy_multiplex"].forEach(function(path) {
+          try {
+            var d = backendUrl + path;
+            var wsUrl = d.replace("http://", "ws://").replace("https://", "wss://")
+              + "?desc=" + encodeURIComponent(window.location.pathname);
+            var ws = new WebSocket(wsUrl);
+            ws.binaryType = "arraybuffer";
+            window.socketPreloaded[d] = ws;
+          } catch (_) {}
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
