@@ -10,7 +10,7 @@ import { useBacktest } from './hooks/useBacktest'
 type Tab = 'terminal' | 'backtest'
 
 export default function App() {
-  const { signals, newSignalId, connected } = useSignalFeed()
+  const { signals, newSignalId, connected, alertSettings, setAlertSettings } = useSignalFeed()
   const { strategies, positions, stats, updateStrategy, addStrategy, deleteStrategy, clearPositions } = useBacktest(signals)
   const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null)
   const [tab, setTab] = useState<Tab>('terminal')
@@ -53,7 +53,7 @@ export default function App() {
         {tab === 'terminal' ? (
           <div className="flex h-full overflow-hidden">
             <div className="flex-1 overflow-hidden md:border-r md:border-[#1e1e1e]">
-              <SignalFeed signals={signals} newSignalId={newSignalId} onTrade={setSelectedSignal} />
+              <SignalFeed signals={signals} newSignalId={newSignalId} onTrade={setSelectedSignal} alertSettings={alertSettings} onAlertSettingsChange={setAlertSettings} />
             </div>
             <div className="w-[320px] shrink-0 bg-[#0d0d0d] overflow-hidden hidden md:flex flex-col">
               <TradePanel signal={selectedSignal} onClose={() => setSelectedSignal(null)} />

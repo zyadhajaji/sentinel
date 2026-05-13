@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import type { Signal } from '../types'
+import type { AlertSettings } from '../lib/alertEngine'
 import { TokenCard } from './TokenCard'
 
 interface Props {
   signals: Signal[]
   newSignalId: string | null
   onTrade: (signal: Signal) => void
+  alertSettings: AlertSettings
+  onAlertSettingsChange: (s: AlertSettings) => void
 }
 
 const GRADE_FILTER_OPTIONS = ['ALL', 'SAFE', 'WATCH', 'RISK'] as const
@@ -17,8 +20,60 @@ const GRADE_COLORS: Record<string, string> = {
   RISK: '#ff3355',
 }
 
-export function SignalFeed({ signals, newSignalId, onTrade }: Props) {
+function AlertPanel({ settings, onChange }: { settings: AlertSettings; onChange: (s: AlertSettings) => void }) {
+  const set = (patch: Partial<AlertSettings>) => onChange({ ...settings, ...patch })
+  return (
+    <div className="border-t border-[#1e1e1e] bg-[#0d0d0d] px-4 py-3 space-y-3 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-mono text-[#888888] uppercase tracking-wider">Alert Settings</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={() => set({ soundEnabled: !settings.soundEnabled })}
+          className={`flex items-center gap-2 px-3 py-2.5 rounded border text-[11px] font-mono min-h-[44px] transition-all ${
+            settings.soundEnabled ? 'border-[#00ff8840] text-[#00ff88] bg-[#00ff8808]' : 'border-[#1e1e1e] text-[#555555]'
+          }`}>
+          <span>{settings.soundEnabled ? '🔊' : '🔇'}</span>
+          <span>Sound</span>
+        </button>
+        <button onClick={() => set({ vibrationEnabled: !settings.vibrationEnabled })}
+          className={`flex items-center gap-2 px-3 py-2.5 rounded border text-[11px] font-mono min-h-[44px] transition-all ${
+            settings.vibrationEnabled ? 'border-[#00ff8840] text-[#00ff88] bg-[#00ff8808]' : 'border-[#1e1e1e] text-[#555555]'
+          }`}>
+          <span>📳</span>
+          <span>Vibrate</span>
+        </button>
+        <button onClick={() => set({ safeEnabled: !settings.safeEnabled })}
+          className={`flex items-center gap-2 px-3 py-2.5 rounded border text-[11px] font-mono min-h-[44px] transition-all ${
+            settings.safeEnabled ? 'border-[#00ff8840] text-[#00ff88] bg-[#00ff8808]' : 'border-[#1e1e1e] text-[#555555]'
+          }`}>
+          <span style={{ color: '#00ff88' }}>●</span>
+          <span>SAFE signals</span>
+        </button>
+        <button onClick={() => set({ watchEnabled: !settings.watchEnabled })}
+          className={`flex items-center gap-2 px-3 py-2.5 rounded border text-[11px] font-mono min-h-[44px] transition-all ${
+            settings.watchEnabled ? 'border-[#ffcc0040] text-[#ffcc00] bg-[#ffcc0008]' : 'border-[#1e1e1e] text-[#555555]'
+          }`}>
+          <span style={{ color: '#ffcc00' }}>●</span>
+          <span>WATCH signals</span>
+        </button>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="text-[11px] font-mono text-[#555555]">Min score</span>
+        <input
+          type="range" min={0} max={100} step={5}
+          value={settings.minScore}
+          onChange={e => set({ minScore: parseInt(e.target.value) })}
+          className="flex-1 accent-[#00d4ff]"
+        />
+        <span className="text-[11px] font-mono text-[#00d4ff] w-8 text-right">{settings.minScore}</span>
+      </div>
+    </div>
+  )
+}
+
+export function SignalFeed({ signals, newSignalId, onTrade, alertSettings, onAlertSettingsChange }: Props) {
   const [filter, setFilter] = useState<GradeFilter>('ALL')
+  const [showAlerts, setShowAlerts] = useState(false)
 
   const filtered = filter === 'ALL'
     ? signals
@@ -29,6 +84,8 @@ export function SignalFeed({ signals, newSignalId, onTrade }: Props) {
     WATCH: signals.filter(s => s.score_grade === 'WATCH').length,
     RISK: signals.filter(s => s.score_grade === 'RISK').length,
   }
+
+  const alertsOn = alertSettings.soundEnabled || alertSettings.vibrationEnabled
 
   return (
     <div className="flex flex-col h-full">
@@ -41,6 +98,18 @@ export function SignalFeed({ signals, newSignalId, onTrade }: Props) {
           <span className="text-[11px] font-mono text-[#555555]">{signals.length} signals</span>
         </div>
         <div className="flex items-center gap-1">
+          {/* Alert bell */}
+          <button
+            onClick={() => setShowAlerts(v => !v)}
+            className={`text-[13px] min-h-[36px] min-w-[36px] flex items-center justify-center rounded border transition-all mr-1 ${
+              showAlerts
+                ? 'border-[#2a2a2a] bg-[#141414]'
+                : 'border-transparent'
+            } ${alertsOn ? 'text-[#00d4ff]' : 'text-[#444444]'}`}
+            title="Alert settings"
+          >
+            {alertsOn ? '🔔' : '🔕'}
+          </button>
           {GRADE_FILTER_OPTIONS.map(opt => (
             <button
               key={opt}
@@ -60,6 +129,11 @@ export function SignalFeed({ signals, newSignalId, onTrade }: Props) {
           ))}
         </div>
       </div>
+
+      {/* Alert settings panel */}
+      {showAlerts && (
+        <AlertPanel settings={alertSettings} onChange={onAlertSettingsChange} />
+      )}
 
       {/* Scrollable signal list */}
       <div className="flex-1 overflow-y-auto overscroll-contain">

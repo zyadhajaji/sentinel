@@ -6,6 +6,8 @@ import { fetchTokenPairs, fetchTokenProfiles } from '../lib/dexscreener'
 import type { DexPair, TokenProfile } from '../lib/dexscreener'
 import { calculateScore } from '../lib/scoreEngine'
 import { detectNarratives } from '../lib/narrativeEngine'
+import { triggerAlert, DEFAULT_ALERT_SETTINGS } from '../lib/alertEngine'
+import type { AlertSettings } from '../lib/alertEngine'
 
 const MAX_SIGNALS = 50
 const PROFILE_POLL_MS = 20_000
@@ -130,7 +132,10 @@ export function useSignalFeed() {
   const [signals, setSignals] = useState<Signal[]>([])
   const [newSignalId, setNewSignalId] = useState<string | null>(null)
   const [connected, setConnected] = useState(false)
+  const [alertSettings, setAlertSettings] = useState<AlertSettings>(DEFAULT_ALERT_SETTINGS)
   const seenCAs = useRef<Map<string, number>>(new Map())
+  const alertSettingsRef = useRef(alertSettings)
+  alertSettingsRef.current = alertSettings
 
   const addSignal = useCallback((signal: Signal) => {
     const now = Date.now()
@@ -146,6 +151,7 @@ export function useSignalFeed() {
     setSignals(prev => [signal, ...prev.slice(0, MAX_SIGNALS - 1)])
     setNewSignalId(signal.id)
     setTimeout(() => setNewSignalId(null), 1500)
+    triggerAlert(signal, alertSettingsRef.current)
   }, [])
 
   // Pump.fun WebSocket — instant new token events
@@ -192,5 +198,5 @@ export function useSignalFeed() {
     }
   }, [addSignal])
 
-  return { signals, newSignalId, connected }
+  return { signals, newSignalId, connected, alertSettings, setAlertSettings }
 }
