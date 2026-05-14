@@ -14,6 +14,7 @@ export interface DexPair {
   marketCap: number
   pairCreatedAt: number
   info?: {
+    imageUrl?: string
     socials?: { type: string; url: string }[]
     websites?: { url: string }[]
   }

@@ -6,25 +6,38 @@ import { TradePanel } from './components/TradePanel'
 import { TokenDetailModal } from './components/TokenDetailModal'
 import { BacktestPage } from './components/backtest/BacktestPage'
 import { PortfolioDashboard } from './components/portfolio/PortfolioDashboard'
+import { AdminPanel } from './components/admin/AdminPanel'
+import { AdminProvider } from './contexts/AdminContext'
 import { useSignalFeed } from './hooks/useSignalFeed'
 import { useBacktest } from './hooks/useBacktest'
 
 type Tab = 'terminal' | 'backtest' | 'portfolio'
 
-export default function App() {
+function AppInner() {
   const {
     signals, newSignalId, connected, alertSettings, setAlertSettings, solPrice,
     watchedCAs, addWatchedCA, removeWatchedCA,
   } = useSignalFeed()
   const {
     strategies, positions, stats, botActivity,
-    updateStrategy, toggleAutoTrade, addStrategy, deleteStrategy, clearPositions,
+    updateStrategy, toggleAutoTrade, updatePositionSize, addStrategy, deleteStrategy, clearPositions,
   } = useBacktest(signals)
   const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null)
   const [detailSignal, setDetailSignal] = useState<Signal | null>(null)
   const [tab, setTab] = useState<Tab>('terminal')
+  const [showAdmin, setShowAdmin] = useState(false)
 
   const openCount = positions.filter(p => p.status === 'open').length
+
+  function handleEnableAll() {
+    strategies.forEach(s => updateStrategy({ ...s, enabled: true }))
+  }
+  function handleDisableAll() {
+    strategies.forEach(s => updateStrategy({ ...s, enabled: false }))
+  }
+  function handleSetAllPositionSize(sol: number) {
+    strategies.forEach(s => updatePositionSize(s.id, sol))
+  }
 
   return (
     <div className="flex flex-col bg-[#080808] text-[#e6e6e6]" style={{ height: '100dvh' }}>
@@ -33,6 +46,7 @@ export default function App() {
         solPrice={solPrice}
         botActivity={botActivity}
         openPositions={openCount}
+        onAdminOpen={() => setShowAdmin(true)}
       />
 
       {/* Desktop tab bar */}
@@ -94,6 +108,7 @@ export default function App() {
               onAddStrategy={addStrategy}
               onDeleteStrategy={deleteStrategy}
               onToggleAutoTrade={toggleAutoTrade}
+              onUpdateSize={updatePositionSize}
               onClear={clearPositions}
             />
           </div>
@@ -114,6 +129,18 @@ export default function App() {
 
       {detailSignal && (
         <TokenDetailModal signal={detailSignal} onClose={() => setDetailSignal(null)} />
+      )}
+
+      {/* Admin panel — only renders when open */}
+      {showAdmin && (
+        <AdminPanel
+          strategies={strategies}
+          onClose={() => setShowAdmin(false)}
+          onEnableAll={handleEnableAll}
+          onDisableAll={handleDisableAll}
+          onSetAllPositionSize={handleSetAllPositionSize}
+          onClearPositions={clearPositions}
+        />
       )}
 
       {/* Mobile bottom nav */}
@@ -154,5 +181,13 @@ export default function App() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <AdminProvider>
+      <AppInner />
+    </AdminProvider>
   )
 }

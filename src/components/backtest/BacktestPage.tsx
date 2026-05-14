@@ -21,6 +21,7 @@ interface Props {
   onAddStrategy: (s: Strategy) => void
   onDeleteStrategy: (id: string) => void
   onToggleAutoTrade: (id: string) => void
+  onUpdateSize: (id: string, size: number) => void
   onClear: () => void
 }
 
@@ -111,7 +112,7 @@ function WatchedTokenRow({ ca, onRemove }: { ca: string; onRemove: () => void })
 export function BacktestPage({
   signals, strategies, positions, stats, botActivity,
   watchedCAs, onAddWatchedCA, onRemoveWatchedCA,
-  onSaveStrategy, onAddStrategy, onDeleteStrategy, onToggleAutoTrade, onClear,
+  onSaveStrategy, onAddStrategy, onDeleteStrategy, onToggleAutoTrade, onUpdateSize, onClear,
 }: Props) {
   const [tableFilter, setTableFilter] = useState<TableFilter>('all')
   const [editing, setEditing] = useState<Strategy | null>(null)
@@ -184,6 +185,7 @@ export function BacktestPage({
                   if (s) { setEditing(s); setIsNew(false) }
                 }}
                 onToggleAutoTrade={onToggleAutoTrade}
+                onUpdateSize={onUpdateSize}
               />
             ))}
           </div>

@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react'
 import type { Strategy, StrategyStats } from '../../types/backtest'
 
 interface Props {
@@ -6,6 +7,7 @@ interface Props {
   onToggle: (id: string) => void
   onEdit: (id: string) => void
   onToggleAutoTrade: (id: string) => void
+  onUpdateSize: (id: string, size: number) => void
 }
 
 // ── Mini sparkline SVG from equity curve ─────────────────────────────────────
@@ -79,8 +81,22 @@ function WinRateBar({ rate, wins, losses }: { rate: number; wins: number; losses
   )
 }
 
-export function StrategyCard({ strategy, stats, onToggle, onEdit, onToggleAutoTrade }: Props) {
+export function StrategyCard({ strategy, stats, onToggle, onEdit, onToggleAutoTrade, onUpdateSize }: Props) {
   const pnlColor = stats.totalPnlSol >= 0 ? '#00ff88' : '#ff3355'
+  const [editingSize, setEditingSize] = useState(false)
+  const [sizeInput, setSizeInput] = useState(strategy.positionSizeSol.toFixed(2))
+  const sizeRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editingSize) sizeRef.current?.select()
+  }, [editingSize])
+
+  function commitSize() {
+    const v = parseFloat(sizeInput)
+    if (!isNaN(v) && v > 0) onUpdateSize(strategy.id, v)
+    else setSizeInput(strategy.positionSizeSol.toFixed(2))
+    setEditingSize(false)
+  }
   const isAnakin = strategy.id === 'anakin'
   const hasData = stats.totalTrades > 0
   const activeProtocols = Object.entries(strategy.filters.protocols).filter(([, v]) => v).map(([k]) => k)
@@ -139,7 +155,7 @@ export function StrategyCard({ strategy, stats, onToggle, onEdit, onToggleAutoTr
 
       {/* Equity sparkline */}
       <div className="px-4 pt-3 pb-1 h-12">
-        <Sparkline data={hasData ? stats.equityCurve : []} color={pnlColor} />
+        <Sparkline data={hasData ? stats.equityCurve.map(p => p.value) : []} color={pnlColor} />
       </div>
 
       {/* PnL headline */}
@@ -177,12 +193,36 @@ export function StrategyCard({ strategy, stats, onToggle, onEdit, onToggleAutoTr
             {stats.best > 0 ? `+${stats.best.toFixed(0)}%` : '—'}
           </p>
         </div>
-        <div className="bg-[#0d0d0d] rounded-lg p-2">
-          <p className="text-[10px] font-mono text-[#444444] mb-0.5">Size / trade</p>
-          <p className="text-[12px] font-mono font-bold tabular-nums text-[#e6e6e6]">
-            {strategy.positionSizeSol.toFixed(2)} SOL
+        <button
+          onClick={() => { setSizeInput(strategy.positionSizeSol.toFixed(2)); setEditingSize(true) }}
+          className="bg-[#0d0d0d] rounded-lg p-2 text-left w-full hover:bg-[#141414] transition-colors cursor-pointer border border-transparent hover:border-[#00d4ff20] group"
+        >
+          <p className="text-[10px] font-mono text-[#444444] mb-0.5 flex items-center gap-1">
+            Size / trade
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="2" className="group-hover:stroke-[#00d4ff] transition-colors">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
           </p>
-        </div>
+          {editingSize ? (
+            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+              <input
+                ref={sizeRef}
+                type="number" step="0.01" min="0.001" max="100"
+                value={sizeInput}
+                onChange={e => setSizeInput(e.target.value)}
+                onBlur={commitSize}
+                onKeyDown={e => { if (e.key === 'Enter') commitSize(); if (e.key === 'Escape') { setEditingSize(false) } }}
+                className="w-16 bg-[#1a1a1a] border border-[#00d4ff40] rounded px-1 py-0.5 text-[11px] font-mono text-[#e6e6e6] outline-none"
+              />
+              <span className="text-[10px] font-mono text-[#555]">SOL</span>
+            </div>
+          ) : (
+            <p className="text-[12px] font-mono font-bold tabular-nums text-[#e6e6e6]">
+              {strategy.positionSizeSol.toFixed(2)} SOL
+            </p>
+          )}
+        </button>
       </div>
 
       {/* Filter / exit tags */}

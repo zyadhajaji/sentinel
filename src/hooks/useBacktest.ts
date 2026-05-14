@@ -163,7 +163,16 @@ export function useBacktest(signals: Signal[]) {
   }, [])
 
   const updateStrategy = useCallback((updated: Strategy) => {
-    setStrategies(prev => prev.map(s => (s.id === updated.id && !s.locked) ? updated : s))
+    setStrategies(prev => prev.map(s => {
+      if (s.id !== updated.id) return s
+      // Locked strategies: only allow safe operational fields to change
+      if (s.locked) return { ...s, enabled: updated.enabled, autoTrade: updated.autoTrade, positionSizeSol: updated.positionSizeSol }
+      return updated
+    }))
+  }, [])
+
+  const updatePositionSize = useCallback((id: string, size: number) => {
+    setStrategies(prev => prev.map(s => s.id === id ? { ...s, positionSizeSol: Math.max(0.001, size) } : s))
   }, [])
 
   const toggleAutoTrade = useCallback((id: string) => {
@@ -192,6 +201,6 @@ export function useBacktest(signals: Signal[]) {
   return {
     strategies, positions, stats, botActivity,
     updateStrategy, toggleAutoTrade, updateStrategyEnabled,
-    addStrategy, deleteStrategy, clearPositions,
+    updatePositionSize, addStrategy, deleteStrategy, clearPositions,
   }
 }
