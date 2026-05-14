@@ -67,6 +67,7 @@ export function generateSignal(): Signal {
     contract_age_minutes: randomInt(5, 120),
     has_twitter: Math.random() > 0.4,
     has_website: Math.random() > 0.6,
+    image_url: null,
     twitter_url: Math.random() > 0.4 ? 'https://x.com/example' : null,
     telegram_url: Math.random() > 0.6 ? 'https://t.me/example' : null,
     website_url: Math.random() > 0.6 ? 'https://example.com' : null,
