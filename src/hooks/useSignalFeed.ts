@@ -11,6 +11,7 @@ import type { AlertSettings } from '../lib/alertEngine'
 import { fetchRugReport } from '../lib/rugcheck'
 import { useSolPrice } from './useSolPrice'
 import { loadStorage, saveStorage } from '../lib/storage'
+import { storageKey } from '../lib/appMode'
 
 const MAX_SIGNALS = 50
 const PROFILE_POLL_MS = 20_000
@@ -163,11 +164,11 @@ export function useSignalFeed() {
   const [connected, setConnected] = useState(false)
   const [alertSettings, setAlertSettings] = useState<AlertSettings>(() =>
     // Merge saved settings with defaults so new fields (e.g. browserNotifEnabled) are always present
-    { return { ...DEFAULT_ALERT_SETTINGS, ...loadStorage<Partial<AlertSettings>>('sentinel_alert_settings', {}) } }
+    { return { ...DEFAULT_ALERT_SETTINGS, ...loadStorage<Partial<AlertSettings>>(storageKey('sentinel_alert_settings'), {}) } }
   )
 
   // Persist whenever alert settings change
-  useEffect(() => { saveStorage('sentinel_alert_settings', alertSettings) }, [alertSettings])
+  useEffect(() => { saveStorage(storageKey('sentinel_alert_settings'), alertSettings) }, [alertSettings])
 
   const solPrice = useSolPrice()
   const solPriceRef = useRef(solPrice)
@@ -272,9 +273,9 @@ export function useSignalFeed() {
 
   // ── Custom CA Watchlist ───────────────────────────────────────────────────
   const [watchedCAs, setWatchedCAs] = useState<string[]>(() =>
-    loadStorage<string[]>('sentinel_watched_cas', [])
+    loadStorage<string[]>(storageKey('sentinel_watched_cas'), [])
   )
-  useEffect(() => { saveStorage('sentinel_watched_cas', watchedCAs) }, [watchedCAs])
+  useEffect(() => { saveStorage(storageKey('sentinel_watched_cas'), watchedCAs) }, [watchedCAs])
 
   useEffect(() => {
     if (watchedCAs.length === 0) return

@@ -4,6 +4,7 @@ import type { Strategy, Position, StrategyStats } from '../types/backtest'
 import { DEFAULT_STRATEGIES, evaluateEntry, processExits, calcStats, genPositionId } from '../lib/strategyEngine'
 import { fetchTokenPairs } from '../lib/dexscreener'
 import { loadStorage, saveStorage } from '../lib/storage'
+import { storageKey } from '../lib/appMode'
 
 const PRICE_POLL_MS = 30_000
 const MAX_POSITIONS = 500
@@ -33,25 +34,25 @@ function mergeStrategies(saved: Strategy[]): Strategy[] {
 
 export function useBacktest(signals: Signal[]) {
   const [strategies, setStrategies] = useState<Strategy[]>(() =>
-    mergeStrategies(loadStorage<Strategy[]>('sentinel_strategies', []))
+    mergeStrategies(loadStorage<Strategy[]>(storageKey('sentinel_strategies'), []))
   )
   const [positions, setPositions] = useState<Position[]>(() =>
-    loadStorage<Position[]>('sentinel_positions', [])
+    loadStorage<Position[]>(storageKey('sentinel_positions'), [])
   )
   const [stats, setStats] = useState<Record<string, StrategyStats>>({})
   const [botActivity, setBotActivity] = useState<BotActivity>(() => ({
     totalTrades: 0,
-    lastTradeTime: loadStorage<string | null>('sentinel_last_trade_time', null),
+    lastTradeTime: loadStorage<string | null>(storageKey('sentinel_last_trade_time'), null),
     lastTickTime: null,
     isRunning: true,
   }))
 
   const processedSignals = useRef<Set<string>>(new Set())
 
-  useEffect(() => { saveStorage('sentinel_strategies', strategies) }, [strategies])
-  useEffect(() => { saveStorage('sentinel_positions', positions) }, [positions])
+  useEffect(() => { saveStorage(storageKey('sentinel_strategies'), strategies) }, [strategies])
+  useEffect(() => { saveStorage(storageKey('sentinel_positions'), positions) }, [positions])
   useEffect(() => {
-    if (botActivity.lastTradeTime) saveStorage('sentinel_last_trade_time', botActivity.lastTradeTime)
+    if (botActivity.lastTradeTime) saveStorage(storageKey('sentinel_last_trade_time'), botActivity.lastTradeTime)
   }, [botActivity.lastTradeTime])
 
   // Process new signals → open positions

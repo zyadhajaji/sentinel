@@ -4,6 +4,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import { shortPublicKey } from '../lib/walletDisplay'
 import type { BotActivity } from '../hooks/useBacktest'
 import { useAdmin } from '../contexts/AdminContext'
+import { IS_DEMO } from '../lib/appMode'
 
 interface Props {
   feedConnected: boolean
@@ -11,9 +12,10 @@ interface Props {
   botActivity: BotActivity
   openPositions: number
   onAdminOpen: () => void
+  onProfileOpen: () => void
 }
 
-export function Header({ feedConnected, solPrice, botActivity, openPositions, onAdminOpen }: Props) {
+export function Header({ feedConnected, solPrice, botActivity, openPositions, onAdminOpen, onProfileOpen }: Props) {
   const { publicKey, disconnecting } = useWallet()
   const { setVisible } = useWalletModal()
   const walletPk = publicKey?.toBase58()
@@ -35,6 +37,8 @@ export function Header({ feedConnected, solPrice, botActivity, openPositions, on
     }
     tapTimer.current = setTimeout(() => { tapCount.current = 0 }, 3000)
   }
+
+  const avatarInitials = (profile.username || 'T').slice(0, 2)
 
   return (
     <header
@@ -68,6 +72,9 @@ export function Header({ feedConnected, solPrice, botActivity, openPositions, on
         <div className="flex items-center gap-2">
           <span className="font-display font-bold text-[13px] text-[#e6e6e6] tracking-wider">SENTINEL</span>
           <span className="text-[#222222] font-mono text-[9px] tracking-widest hidden sm:block">TERMINAL</span>
+          {IS_DEMO && (
+            <span className="text-[9px] font-mono text-[#444] bg-[#1a1a1a] border border-[#2a2a2a] px-1.5 py-0.5 rounded tracking-widest">DEMO</span>
+          )}
         </div>
       </div>
 
@@ -100,15 +107,33 @@ export function Header({ feedConnected, solPrice, botActivity, openPositions, on
         )}
       </div>
 
-      {/* Wallet button */}
-      <button
-        type="button"
-        onClick={() => setVisible(true)}
-        disabled={disconnecting}
-        className="min-h-[44px] px-3 py-2 text-[11px] font-mono font-bold rounded border border-[#00d4ff30] text-[#00d4ff] bg-[#00d4ff08] hover:bg-[#00d4ff18] active:bg-[#00d4ff25] hover:border-[#00d4ff60] transition-all disabled:opacity-50 cursor-pointer"
-      >
-        {walletPk ? shortPublicKey(walletPk) : 'CONNECT'}
-      </button>
+      {/* Right side: profile avatar + wallet */}
+      <div className="flex items-center gap-2">
+        {/* Profile avatar button */}
+        <button
+          type="button"
+          onClick={onProfileOpen}
+          aria-label="Edit profile"
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold cursor-pointer transition-all hover:opacity-80 active:scale-95 select-none shrink-0"
+          style={{
+            background: `${profile.avatarColor}22`,
+            border: `1.5px solid ${profile.avatarColor}50`,
+            color: profile.avatarColor,
+          }}
+        >
+          {avatarInitials}
+        </button>
+
+        {/* Wallet button */}
+        <button
+          type="button"
+          onClick={() => setVisible(true)}
+          disabled={disconnecting}
+          className="min-h-[44px] px-3 py-2 text-[11px] font-mono font-bold rounded border border-[#00d4ff30] text-[#00d4ff] bg-[#00d4ff08] hover:bg-[#00d4ff18] active:bg-[#00d4ff25] hover:border-[#00d4ff60] transition-all disabled:opacity-50 cursor-pointer"
+        >
+          {walletPk ? shortPublicKey(walletPk) : 'CONNECT'}
+        </button>
+      </div>
     </header>
   )
 }

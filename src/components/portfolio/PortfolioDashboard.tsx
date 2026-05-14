@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { Position, Strategy, StrategyStats } from '../../types/backtest'
 import { formatUSD } from '../../lib/mockData'
 import { useWalletBalance } from '../../hooks/useWalletBalance'
@@ -11,6 +11,7 @@ interface Props {
   stats: Record<string, StrategyStats>
   solPrice: number
   onClear: () => void
+  onProfileOpen: () => void
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -254,13 +255,34 @@ function BalanceRing({ winRate, size = 160 }: { winRate: number; size?: number }
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 type SubTab = 'overview' | 'open' | 'best'
 
-export function PortfolioDashboard({ strategies, positions, stats, solPrice, onClear }: Props) {
+export function PortfolioDashboard({ strategies, positions, stats, solPrice, onClear, onProfileOpen }: Props) {
   const [subTab, setSubTab] = useState<SubTab>('overview')
+  const [balanceEditOpen, setBalanceEditOpen] = useState(false)
+  const [fakeBalanceInput, setFakeBalanceInput] = useState('')
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { balance } = useWalletBalance()
-  const { profile } = useAdmin()
+  const { profile, fakeBalance, setFakeBalance } = useAdmin()
   const { publicKey } = useWallet()
 
   const walletPk = publicKey?.toBase58()
+
+  // The balance shown — fakeBalance overrides real when set
+  const displayBalance = fakeBalance !== null ? fakeBalance : balance
+
+  function handleBalancePressStart() {
+    pressTimer.current = setTimeout(() => {
+      setFakeBalanceInput(fakeBalance !== null ? String(fakeBalance) : balance !== null ? balance.toFixed(4) : '')
+      setBalanceEditOpen(true)
+    }, 500)
+  }
+  function handleBalancePressEnd() {
+    if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null }
+  }
+  function commitFakeBalance() {
+    const val = parseFloat(fakeBalanceInput)
+    setFakeBalance(!isNaN(val) && val > 0 ? val : null)
+    setBalanceEditOpen(false)
+  }
 
   const allClosed = positions.filter(p => p.status !== 'open')
   const allOpen   = positions.filter(p => p.status === 'open')
@@ -298,11 +320,15 @@ export function PortfolioDashboard({ strategies, positions, stats, solPrice, onC
             {/* Profile row */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
-                {/* Avatar */}
-                <div className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0"
-                  style={{ background: `${profile.avatarColor}20`, border: `2px solid ${profile.avatarColor}40`, color: profile.avatarColor }}>
+                {/* Avatar — tap to edit profile */}
+                <button
+                  onClick={onProfileOpen}
+                  aria-label="Edit profile"
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0 cursor-pointer transition-all hover:opacity-80 active:scale-95 select-none"
+                  style={{ background: `${profile.avatarColor}20`, border: `2px solid ${profile.avatarColor}40`, color: profile.avatarColor }}
+                >
                   {profile.username.slice(0, 2)}
-                </div>
+                </button>
                 <div>
                   <p className="text-[12px] font-bold text-[#e6e6e6]" style={{ fontFamily: "'Inter', sans-serif" }}>{profile.username}</p>
                   {walletPk && (
@@ -321,11 +347,33 @@ export function PortfolioDashboard({ strategies, positions, stats, solPrice, onC
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[11px] font-mono text-[#555555] mb-1 uppercase tracking-wider">SOL Balance</p>
-                <p className="text-[32px] font-bold tabular-nums text-[#f0f0f0] leading-none" style={{ fontFamily: "'Inter', sans-serif" }}>
-                  {balance !== null ? balance.toFixed(4) : '-.----'}
-                </p>
+                {balanceEditOpen ? (
+                  <input
+                    type="number"
+                    value={fakeBalanceInput}
+                    onChange={e => setFakeBalanceInput(e.target.value)}
+                    onBlur={commitFakeBalance}
+                    onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setBalanceEditOpen(false) } }}
+                    className="w-36 bg-transparent border-b border-[#2a2a2a] text-[32px] font-bold tabular-nums text-[#f0f0f0] leading-none outline-none mb-1"
+                    style={{ fontFamily: "'Inter', sans-serif" }}
+                    autoFocus
+                  />
+                ) : (
+                  <p
+                    className="text-[32px] font-bold tabular-nums text-[#f0f0f0] leading-none select-none"
+                    style={{ fontFamily: "'Inter', sans-serif", WebkitUserSelect: 'none' }}
+                    onMouseDown={handleBalancePressStart}
+                    onMouseUp={handleBalancePressEnd}
+                    onMouseLeave={handleBalancePressEnd}
+                    onTouchStart={handleBalancePressStart}
+                    onTouchEnd={handleBalancePressEnd}
+                    onContextMenu={e => e.preventDefault()}
+                  >
+                    {displayBalance !== null ? displayBalance.toFixed(4) : '-.----'}
+                  </p>
+                )}
                 <p className="text-[14px] font-mono text-[#555555] mt-1">
-                  ${balance !== null ? (balance * solPrice).toFixed(2) : '--.--'}
+                  ${displayBalance !== null ? (displayBalance * solPrice).toFixed(2) : '--.--'}
                 </p>
                 {/* Paper PnL chip */}
                 <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono font-bold"
