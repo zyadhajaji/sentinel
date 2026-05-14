@@ -27,9 +27,6 @@ function pnlPct(pos: Position): number {
   return pos.positionSizeSol > 0 ? (pos.totalPnlSol / pos.positionSizeSol) * 100 : 0
 }
 
-function shortAddr(addr: string): string {
-  return `${addr.slice(0, 4)}...${addr.slice(-4)}`
-}
 
 const STATUS_CFG: Record<string, { label: string; color: string }> = {
   open:           { label: 'LIVE',    color: '#00d4ff' },
@@ -229,6 +226,31 @@ function BestTradeCard({ pos, rank, strategy }: { pos: Position; rank: number; s
   )
 }
 
+// ── Circular balance gauge ────────────────────────────────────────────────────
+function BalanceRing({ winRate, size = 160 }: { winRate: number; size?: number }) {
+  const R = size / 2 - 12
+  const C = 2 * Math.PI * R
+  const filled = (Math.min(100, winRate) / 100) * C
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
+      {/* Track */}
+      <circle cx={size/2} cy={size/2} r={R} fill="none" stroke="#1a1a1a" strokeWidth="10"/>
+      {/* Win rate arc */}
+      <circle cx={size/2} cy={size/2} r={R} fill="none"
+        stroke="url(#balGrad)" strokeWidth="10"
+        strokeLinecap="round"
+        strokeDasharray={`${filled} ${C - filled}`}
+        transform={`rotate(-90 ${size/2} ${size/2})`}/>
+      <defs>
+        <linearGradient id="balGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#00d4ff"/>
+          <stop offset="100%" stopColor="#00ff88"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  )
+}
+
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 type SubTab = 'overview' | 'open' | 'best'
 
@@ -237,6 +259,8 @@ export function PortfolioDashboard({ strategies, positions, stats, solPrice, onC
   const { balance } = useWalletBalance()
   const { profile } = useAdmin()
   const { publicKey } = useWallet()
+
+  const walletPk = publicKey?.toBase58()
 
   const allClosed = positions.filter(p => p.status !== 'open')
   const allOpen   = positions.filter(p => p.status === 'open')
@@ -259,148 +283,96 @@ export function PortfolioDashboard({ strategies, positions, stats, solPrice, onC
 
   const bestTrades = [...allClosed].sort((a, b) => pnlPct(b) - pnlPct(a)).slice(0, 20)
 
-  // Avatar initials
-  const initials = profile.username.slice(0, 2).toUpperCase()
-
   return (
     <div className="h-full overflow-y-auto overscroll-contain">
       <div className="max-w-4xl mx-auto">
 
-        {/* ── Phantom-style Header ─────────────────────────────────────── */}
-        <div
-          className="relative px-5 pt-6 pb-5"
-          style={{
-            background: 'linear-gradient(180deg, #111 0%, #0d0d0d 100%)',
-            borderBottom: '1px solid #1a1a1a',
-          }}
-        >
-          {/* Purple radial glow */}
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{ background: 'radial-gradient(ellipse 60% 80% at 50% 0%, rgba(147,51,234,0.06) 0%, transparent 70%)' }}
-          />
+        {/* ── Figma-inspired balance header ─────────────────────────────── */}
+        <div className="relative overflow-hidden rounded-2xl mx-4 mt-4 mb-2"
+          style={{ background: 'linear-gradient(135deg, #0d1117 0%, #0a0f1a 50%, #0d0d1a 100%)' }}>
+          {/* Subtle radial glow */}
+          <div className="absolute inset-0 pointer-events-none"
+            style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(0,212,255,0.06) 0%, transparent 70%)' }}/>
 
-          {/* User row */}
-          <div className="flex items-center gap-3 mb-5 relative">
-            <div
-              className="w-11 h-11 rounded-full flex items-center justify-center text-[14px] font-bold shrink-0"
-              style={{ background: `${profile.avatarColor}20`, color: profile.avatarColor, border: `1.5px solid ${profile.avatarColor}40` }}
-            >
-              {initials}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[14px] font-bold text-[#f0f0f0]" style={{ fontFamily: "'Inter', sans-serif" }}>
-                {profile.username}
-              </p>
-              {publicKey ? (
-                <button
-                  onClick={() => navigator.clipboard.writeText(publicKey.toBase58()).catch(() => {})}
-                  className="text-[11px] font-mono text-[#555555] hover:text-[#888888] transition-colors cursor-pointer flex items-center gap-1"
-                >
-                  {shortAddr(publicKey.toBase58())}
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                  </svg>
-                </button>
-              ) : (
-                <p className="text-[11px] font-mono text-[#333333]">not connected</p>
-              )}
-            </div>
-            <button
-              onClick={onClear}
-              className="text-[10px] font-mono px-2.5 min-h-[28px] rounded-lg border border-[#1e1e1e] text-[#444444] hover:text-[#888888] hover:border-[#2a2a2a] transition-all cursor-pointer shrink-0"
-            >
-              Clear
-            </button>
-          </div>
-
-          {/* Balance */}
-          <div className="text-center mb-4 relative">
-            <p className="text-[28px] font-bold tabular-nums leading-none text-[#f0f0f0]" style={{ fontFamily: "'Inter', sans-serif" }}>
-              {balance !== null ? `${balance.toFixed(4)} SOL` : '—'}
-            </p>
-            <p className="text-[13px] font-mono text-[#555555] mt-1">
-              {balance !== null ? `$${(balance * solPrice).toFixed(2)} USD` : 'Connect wallet'}
-            </p>
-            {/* PnL chip */}
-            {positions.length > 0 && (
-              <div className="flex justify-center mt-3">
-                <span
-                  className="inline-flex items-center gap-1.5 text-[11px] font-mono px-3 py-1.5 rounded-full"
-                  style={{ color: pnlColor, background: `${pnlColor}12`, border: `1px solid ${pnlColor}30` }}
-                >
-                  {totalPnlSol >= 0 ? '📈' : '📉'}
-                  {totalPnlSol >= 0 ? '+' : ''}{totalPnlSol.toFixed(4)} SOL
-                  <span style={{ color: pnlColor, opacity: 0.7 }}>
-                    ({totalPnlUsd >= 0 ? '+' : ''}${Math.abs(totalPnlUsd).toFixed(2)})
-                  </span>
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Action buttons row */}
-          <div className="flex justify-center gap-6 relative">
-            {[
-              { label: 'SEND', icon: (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                </svg>
-              )},
-              { label: 'RECEIVE', icon: (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/>
-                </svg>
-              )},
-              { label: 'BUY', icon: (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"/><polyline points="5 12 12 19 19 12"/>
-                </svg>
-              )},
-              { label: 'HISTORY', icon: (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                </svg>
-              )},
-            ].map(btn => (
-              <button
-                key={btn.label}
-                className="flex flex-col items-center gap-1.5 cursor-pointer group"
-                onClick={e => e.stopPropagation()}
-              >
-                <div
-                  className="w-11 h-11 rounded-full flex items-center justify-center transition-all"
-                  style={{ background: '#1a1a1a', color: '#555555' }}
-                >
-                  {btn.icon}
+          <div className="relative p-5">
+            {/* Profile row */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                {/* Avatar */}
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0"
+                  style={{ background: `${profile.avatarColor}20`, border: `2px solid ${profile.avatarColor}40`, color: profile.avatarColor }}>
+                  {profile.username.slice(0, 2)}
                 </div>
-                <span className="text-[9px] font-mono text-[#444444] group-hover:text-[#666666] transition-colors">{btn.label}</span>
+                <div>
+                  <p className="text-[12px] font-bold text-[#e6e6e6]" style={{ fontFamily: "'Inter', sans-serif" }}>{profile.username}</p>
+                  {walletPk && (
+                    <p className="text-[10px] font-mono text-[#444]">{walletPk.slice(0,4)}...{walletPk.slice(-4)}</p>
+                  )}
+                </div>
+              </div>
+              {/* Clear button */}
+              <button onClick={onClear}
+                className="text-[10px] font-mono px-2.5 py-1.5 rounded-lg border border-[#1e1e1e] text-[#444444] hover:text-[#888888] transition-all cursor-pointer">
+                Clear
               </button>
-            ))}
+            </div>
+
+            {/* Balance + ring */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-mono text-[#555555] mb-1 uppercase tracking-wider">SOL Balance</p>
+                <p className="text-[32px] font-bold tabular-nums text-[#f0f0f0] leading-none" style={{ fontFamily: "'Inter', sans-serif" }}>
+                  {balance !== null ? balance.toFixed(4) : '-.----'}
+                </p>
+                <p className="text-[14px] font-mono text-[#555555] mt-1">
+                  ${balance !== null ? (balance * solPrice).toFixed(2) : '--.--'}
+                </p>
+                {/* Paper PnL chip */}
+                <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono font-bold"
+                  style={{
+                    color: pnlColor,
+                    background: `${pnlColor}12`,
+                    border: `1px solid ${pnlColor}25`
+                  }}>
+                  <span>{totalPnlSol >= 0 ? '+' : ''}{totalPnlSol.toFixed(3)} SOL</span>
+                  <span style={{ color: `${pnlColor}80` }}>paper</span>
+                </div>
+              </div>
+              {/* Circular gauge */}
+              <div className="relative shrink-0">
+                <BalanceRing winRate={winRate} size={130}/>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <p className="text-[20px] font-bold tabular-nums" style={{ color: winRateColor, fontFamily: "'Inter', sans-serif" }}>
+                    {allClosed.length > 0 ? `${winRate.toFixed(0)}%` : '—'}
+                  </p>
+                  <p className="text-[9px] font-mono text-[#444]">WIN RATE</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Action buttons row — also serve as tab switcher */}
+            <div className="flex gap-3 mt-4">
+              {([
+                { label: 'Positions', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>, tab: 'open' as const },
+                { label: 'Best', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>, tab: 'best' as const },
+                { label: 'Overview', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>, tab: 'overview' as const },
+              ] as const).map(btn => (
+                <button key={btn.tab} onClick={() => setSubTab(btn.tab)}
+                  className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-xl border transition-all cursor-pointer"
+                  style={{
+                    borderColor: subTab === btn.tab ? '#00d4ff30' : '#1e1e1e',
+                    background: subTab === btn.tab ? '#00d4ff0a' : '#0d0d0d',
+                    color: subTab === btn.tab ? '#00d4ff' : '#444444',
+                  }}>
+                  {btn.icon}
+                  <span className="text-[9px] font-mono">{btn.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         <div className="p-4 space-y-4">
-          {/* ── Phantom pill tab bar ─────────────────────────────────────── */}
-          <div className="flex gap-1 p-1 bg-[#111111] rounded-xl border border-[#1a1a1a]">
-            {([
-              { id: 'overview' as const, label: 'OVERVIEW' },
-              { id: 'open'     as const, label: `OPEN${allOpen.length > 0 ? ` · ${allOpen.length}` : ''}` },
-              { id: 'best'     as const, label: `BEST${winners.length > 0 ? ` · ${Math.min(winners.length, 20)}` : ''}` },
-            ]).map(t => (
-              <button
-                key={t.id}
-                onClick={() => setSubTab(t.id)}
-                className={`flex-1 text-[11px] font-mono py-2 rounded-lg transition-all cursor-pointer font-bold ${
-                  subTab === t.id
-                    ? 'bg-white text-[#0d0d0d] shadow-sm'
-                    : 'text-[#444444] hover:text-[#777777]'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
 
           {/* ═══════════════════════════════════════════ OVERVIEW ════════ */}
           {subTab === 'overview' && (

@@ -92,7 +92,7 @@ function rugLabel(score: number | null): { text: string; color: string } | null 
 
 // ── Mini sparkline ────────────────────────────────────────────────────────────
 function MiniSparkline({ ca, priceChange }: { ca: string; priceChange: number }) {
-  const W = 90, H = 32, pts = 20
+  const W = 72, H = 22, pts = 20
   let seed = 0
   for (let i = 0; i < ca.length; i++) seed = (seed * 31 + ca.charCodeAt(i)) & 0xffffff
 
@@ -121,7 +121,7 @@ function MiniSparkline({ ca, priceChange }: { ca: string; priceChange: number })
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} fill="none" className="shrink-0">
       <polygon points={area} fill={`${color}18`} />
       <polyline points={polyline} stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={coords[coords.length - 1].x} cy={coords[coords.length - 1].y} r="2" fill={color} />
+      <circle cx={coords[coords.length - 1].x} cy={coords[coords.length - 1].y} r="1.5" fill={color} />
     </svg>
   )
 }
@@ -133,17 +133,17 @@ function TokenAvatar({ imageUrl, symbol, grade }: { imageUrl: string | null; sym
   const initials = symbol.slice(0, 2).toUpperCase()
 
   return (
-    <div className="relative shrink-0 w-[52px] h-[52px]">
+    <div className="relative shrink-0 w-[44px] h-[44px]">
       {imageUrl && !imgErr ? (
         <img
           src={imageUrl}
           alt={symbol}
           onError={() => setImgErr(true)}
-          className="w-[52px] h-[52px] rounded-xl object-cover bg-[#1a1a1a]"
+          className="w-[44px] h-[44px] rounded-xl object-cover bg-[#1a1a1a]"
         />
       ) : (
         <div
-          className="w-[52px] h-[52px] rounded-xl flex items-center justify-center text-[15px] font-bold font-display"
+          className="w-[44px] h-[44px] rounded-xl flex items-center justify-center text-[13px] font-bold font-display"
           style={{ background: `${cfg.color}15`, color: cfg.color, border: `1px solid ${cfg.color}28` }}
         >
           {initials}
@@ -231,206 +231,180 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
         </div>
       ))}
 
-      <div className="p-3">
-        {/* ── Main row ───────────────────────────────────────────────────── */}
-        <div className="flex items-start gap-2.5">
-          <TokenAvatar imageUrl={signal.image_url} symbol={signal.token_symbol} grade={signal.score_grade} />
+      {/* ── Section A: Main row ─────────────────────────────────────────── */}
+      <div className="flex items-start gap-2.5 p-2.5">
+        <TokenAvatar imageUrl={signal.image_url} symbol={signal.token_symbol} grade={signal.score_grade} />
 
-          {/* Center info */}
-          <div className="flex-1 min-w-0">
-            {/* Row 1: symbol · grade · rug */}
-            <div className="flex items-center gap-1.5 mb-1">
-              <span className="font-bold text-[14px] text-[#e8e8e8] tracking-wide truncate" style={{ fontFamily: "'Inter', sans-serif" }}>
-                {signal.token_symbol}
-              </span>
-              <span
-                className="text-[9px] font-mono px-1.5 py-0.5 rounded-full shrink-0 font-bold"
-                style={{ color: grade.color, background: `${grade.color}15`, border: `1px solid ${grade.color}30` }}
-              >
-                {grade.label}
-              </span>
-              {rug && (
-                <span
-                  className="text-[9px] font-mono px-1.5 py-0.5 rounded-full shrink-0 font-bold"
-                  style={{ color: rug.color, background: `${rug.color}12` }}
-                >
-                  {rug.text}
-                </span>
-              )}
-            </div>
-
-            {/* Row 2: age · CA · source */}
-            <div className="flex items-center gap-1 text-[10px] font-mono text-[#444444] flex-wrap mb-1.5">
-              <span className="text-[#555555]">{ageLabel(signal.contract_age_minutes)}</span>
-              <span className="text-[#252525]">·</span>
-              <button
-                onClick={copyCA}
-                className="transition-colors cursor-pointer hover:text-[#888888]"
-                style={{ color: copied ? '#00ff88' : '#333333' }}
-                title="Copy CA"
-              >
-                {copied ? 'copied!' : shortCA(signal.ca)}
-              </button>
-              <span className="text-[#252525]">·</span>
-              <span
-                className="px-1.5 py-0.5 rounded text-[9px] font-bold"
-                style={{ color: '#888', background: '#1a1a1a' }}
-              >
-                {SOURCE_LABELS[signal.source] ?? signal.source}
-              </span>
-            </div>
-
-            {/* Row 3: socials · holders */}
-            <div className="flex items-center gap-1">
-              {signal.twitter_url && (
-                <SocialBtn href={signal.twitter_url} label="Twitter">
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.63zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                  </svg>
-                </SocialBtn>
-              )}
-              {signal.telegram_url && (
-                <SocialBtn href={signal.telegram_url} label="Telegram">
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/>
-                  </svg>
-                </SocialBtn>
-              )}
-              {signal.website_url && (
-                <SocialBtn href={signal.website_url} label="Website">
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
-                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                  </svg>
-                </SocialBtn>
-              )}
-              {signal.dex_url && (
-                <SocialBtn href={signal.dex_url} label="DEX">
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                    <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-                  </svg>
-                </SocialBtn>
-              )}
-              {signal.holders !== null && (
-                <span className="ml-1 text-[10px] font-mono text-[#444444]">
-                  👥 {signal.holders >= 1000 ? `${(signal.holders / 1000).toFixed(1)}K` : signal.holders}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Right: sparkline + stats */}
-          <div className="shrink-0 flex flex-col items-end gap-1.5">
-            <MiniSparkline ca={signal.ca} priceChange={signal.price_change_1h} />
-            {/* Volume */}
-            <div className="text-right">
-              <span className="text-[9px] font-mono text-[#444444]">V </span>
-              <span className="text-[11px] font-mono tabular-nums font-bold" style={{ color: '#ffcc00' }}>
-                {fmt(signal.volume_1h)}
-              </span>
-            </div>
-            {/* MCap */}
-            <div className="text-right">
-              <span className="text-[9px] font-mono text-[#444444]">MC </span>
-              <span className="text-[11px] font-mono tabular-nums font-bold" style={{ color: pxColor }}>
-                {fmt(signal.mcap_usd)}
-              </span>
-            </div>
-            {/* Fees */}
-            <div className="text-right">
-              <span className="text-[9px] font-mono text-[#444444]">F </span>
-              <span className="text-[10px] font-mono tabular-nums text-[#555555]">
-                {fmtSOL(signal.fees_est_sol)}
-              </span>
-            </div>
-            {/* Liquidity */}
-            <div className="text-right">
-              <span className="text-[9px] font-mono text-[#444444]">LIQ </span>
-              <span className="text-[10px] font-mono tabular-nums text-[#555555]">
-                {fmt(signal.liquidity_usd)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Stats row: BP bar + stat chips ──────────────────────────────── */}
-        <div className="mt-2.5 pt-2.5 border-t border-[#181818]">
-          {/* Segmented BP bar */}
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-[9px] font-mono text-[#333333] shrink-0">BP</span>
-            <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-[#1a1a1a] flex">
-              <div
-                className="h-full transition-all duration-500"
-                style={{ width: `${signal.buy_pressure}%`, background: '#00ff88', opacity: 0.7 }}
-              />
-              <div
-                className="h-full"
-                style={{ width: `${100 - signal.buy_pressure}%`, background: '#ff3355', opacity: 0.4 }}
-              />
-            </div>
-          </div>
-          {/* Stat chips */}
-          <div className="flex items-center gap-1.5">
-            {/* Buy pressure chip */}
-            <span
-              className="text-[9px] font-mono px-2 py-0.5 rounded-full font-bold"
-              style={{ color: bpColor, background: `${bpColor}15`, border: `1px solid ${bpColor}30` }}
-            >
-              {signal.buy_pressure}% BP
+        {/* Center info */}
+        <div className="flex-1 min-w-0">
+          {/* Row 1: symbol · grade · rug */}
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span className="font-bold text-[14px] text-[#e8e8e8] tracking-wide truncate" style={{ fontFamily: "'Inter', sans-serif" }}>
+              {signal.token_symbol}
             </span>
-            {/* Price change chip */}
             <span
-              className="text-[9px] font-mono px-2 py-0.5 rounded-full font-bold"
-              style={{ color: pxColor, background: `${pxColor}15`, border: `1px solid ${pxColor}30` }}
-            >
-              {pxSign}{signal.price_change_1h.toFixed(1)}%
-            </span>
-            {/* Grade chip */}
-            <span
-              className="text-[9px] font-mono px-2 py-0.5 rounded-full font-bold"
+              className="text-[9px] font-mono px-1.5 py-0.5 rounded-full shrink-0 font-bold"
               style={{ color: grade.color, background: `${grade.color}15`, border: `1px solid ${grade.color}30` }}
             >
               {grade.label}
             </span>
+            {rug && (
+              <span
+                className="text-[9px] font-mono px-1.5 py-0.5 rounded-full shrink-0 font-bold"
+                style={{ color: rug.color, background: `${rug.color}12` }}
+              >
+                {rug.text}
+              </span>
+            )}
+          </div>
+
+          {/* Row 2: age · CA · source */}
+          <div className="flex items-center gap-1 text-[10px] font-mono text-[#444444] flex-wrap mb-0.5">
+            <span className="text-[#555555]">{ageLabel(signal.contract_age_minutes)}</span>
+            <span className="text-[#252525]">·</span>
+            <button
+              onClick={copyCA}
+              className="transition-colors cursor-pointer hover:text-[#888888]"
+              style={{ color: copied ? '#00ff88' : '#333333' }}
+              title="Copy CA"
+            >
+              {copied ? 'copied!' : shortCA(signal.ca)}
+            </button>
+            <span className="text-[#252525]">·</span>
+            <span
+              className="px-1.5 py-0.5 rounded text-[9px] font-bold"
+              style={{ color: '#888', background: '#1a1a1a' }}
+            >
+              {SOURCE_LABELS[signal.source] ?? signal.source}
+            </span>
+          </div>
+
+          {/* Row 3: socials · holders */}
+          <div className="flex items-center gap-1">
+            {signal.twitter_url && (
+              <SocialBtn href={signal.twitter_url} label="Twitter">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.63zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+              </SocialBtn>
+            )}
+            {signal.telegram_url && (
+              <SocialBtn href={signal.telegram_url} label="Telegram">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/>
+                </svg>
+              </SocialBtn>
+            )}
+            {signal.website_url && (
+              <SocialBtn href={signal.website_url} label="Website">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+              </SocialBtn>
+            )}
+            {signal.dex_url && (
+              <SocialBtn href={signal.dex_url} label="DEX">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                  <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+              </SocialBtn>
+            )}
+            {signal.holders !== null && (
+              <span className="ml-1 text-[10px] font-mono text-[#444444]">
+                👥 {signal.holders >= 1000 ? `${(signal.holders / 1000).toFixed(1)}K` : signal.holders}
+              </span>
+            )}
           </div>
         </div>
 
-        {/* ── Action row ──────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-end gap-1.5 mt-2.5 pt-2.5 border-t border-[#181818]">
-          <button
-            onClick={(e) => { e.stopPropagation(); setShowBreakdown(v => !v) }}
-            className="text-[10px] font-mono text-[#333333] hover:text-[#666666] transition-colors min-h-[28px] px-2 flex items-center gap-1 cursor-pointer rounded-lg"
-          >
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-              style={{ transform: showBreakdown ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-            {signal.scanner_score}
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); toggle(signal.ca) }}
-            className="w-8 h-8 flex items-center justify-center rounded-xl border transition-all cursor-pointer"
-            style={isWatched ? { borderColor: '#ffcc0035', background: '#ffcc0010' } : { borderColor: '#1e1e1e' }}
-            aria-label={isWatched ? 'Unwatch' : 'Watch'}
-          >
-            <StarIcon filled={isWatched} />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onTrade(signal) }}
-            className="h-8 px-4 text-[11px] font-mono font-bold rounded-xl border transition-all cursor-pointer"
-            style={{ borderColor: '#00d4ff30', color: '#00d4ff', background: '#00d4ff08' }}
-          >
-            BUY
-          </button>
-        </div>
-
-        {showBreakdown && (
-          <div className="mt-3 pt-3 border-t border-[#181818]">
-            <ScoreBreakdownPanel breakdown={signal.score_breakdown} grade={signal.score_grade} />
+        {/* Right: sparkline + compact 2-line stats */}
+        <div className="shrink-0 flex flex-col items-end gap-1">
+          <MiniSparkline ca={signal.ca} priceChange={signal.price_change_1h} />
+          {/* Line 1: V · MC */}
+          <div className="flex gap-3">
+            <span className="text-[10px] font-mono">
+              <span style={{ color: '#333' }}>V </span>
+              <span style={{ color: '#ffcc00' }}>{fmt(signal.volume_1h)}</span>
+            </span>
+            <span className="text-[10px] font-mono">
+              <span style={{ color: '#333' }}>MC </span>
+              <span style={{ color: pxColor }}>{fmt(signal.mcap_usd)}</span>
+            </span>
           </div>
-        )}
+          {/* Line 2: F · L */}
+          <div className="flex gap-3">
+            <span className="text-[10px] font-mono">
+              <span style={{ color: '#333' }}>F </span>
+              <span style={{ color: '#555' }}>{fmtSOL(signal.fees_est_sol)}</span>
+            </span>
+            <span className="text-[10px] font-mono">
+              <span style={{ color: '#333' }}>L </span>
+              <span style={{ color: '#555' }}>{fmt(signal.liquidity_usd)}</span>
+            </span>
+          </div>
+        </div>
       </div>
+
+      {/* ── Section B: Bottom strip (one row) ───────────────────────────── */}
+      <div className="flex items-center gap-2 border-t border-[#181818] pt-2 mt-0 mx-2.5 mb-2.5">
+        {/* LEFT: BP bar + % */}
+        <div className="flex-1 flex items-center gap-1.5 min-w-0">
+          <div className="flex-1 h-1 rounded-full overflow-hidden bg-[#1a1a1a] flex">
+            <div
+              className="h-full transition-all duration-500"
+              style={{ width: `${signal.buy_pressure}%`, background: '#00ff88', opacity: 0.7 }}
+            />
+            <div
+              className="h-full"
+              style={{ width: `${100 - signal.buy_pressure}%`, background: '#ff3355', opacity: 0.4 }}
+            />
+          </div>
+          <span className="text-[9px] font-mono shrink-0" style={{ color: bpColor }}>{signal.buy_pressure}%</span>
+        </div>
+
+        {/* MIDDLE: price change chip */}
+        <span
+          className="text-[9px] font-mono px-2 py-0.5 rounded-full font-bold shrink-0"
+          style={{ color: pxColor, background: `${pxColor}15`, border: `1px solid ${pxColor}30` }}
+        >
+          {pxSign}{signal.price_change_1h.toFixed(1)}%
+        </span>
+
+        {/* RIGHT: score expand · star · BUY */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowBreakdown(v => !v) }}
+          className="text-[10px] font-mono text-[#333333] hover:text-[#666666] transition-colors h-7 px-2 flex items-center gap-1 cursor-pointer rounded-lg shrink-0"
+        >
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            style={{ transform: showBreakdown ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          {signal.scanner_score}
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); toggle(signal.ca) }}
+          className="w-7 h-7 flex items-center justify-center rounded-xl border transition-all cursor-pointer shrink-0"
+          style={isWatched ? { borderColor: '#ffcc0035', background: '#ffcc0010' } : { borderColor: '#1e1e1e' }}
+          aria-label={isWatched ? 'Unwatch' : 'Watch'}
+        >
+          <StarIcon filled={isWatched} />
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onTrade(signal) }}
+          className="h-7 px-3 text-[11px] font-mono font-bold rounded-xl border transition-all cursor-pointer shrink-0"
+          style={{ borderColor: '#00d4ff30', color: '#00d4ff', background: '#00d4ff08' }}
+        >
+          BUY
+        </button>
+      </div>
+
+      {showBreakdown && (
+        <div className="mx-2.5 mb-2.5 pt-2 border-t border-[#181818]">
+          <ScoreBreakdownPanel breakdown={signal.score_breakdown} grade={signal.score_grade} />
+        </div>
+      )}
     </div>
   )
 }

@@ -169,6 +169,26 @@ export function BacktestPage({
         </div>
 
         <div className="p-4 space-y-4">
+          {/* Enable strategies banner */}
+          {strategies.some(s => !s.enabled) && (
+            <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#141414] border border-[#1e1e1e]">
+              <div>
+                <p className="text-[11px] font-mono text-[#888888]">
+                  {strategies.filter(s => !s.enabled).length} strategies are <span className="text-[#ffcc00]">disabled</span>
+                </p>
+                <p className="text-[10px] font-mono text-[#444444] mt-0.5">
+                  Enable them individually below, or tap ⚡ logo 5× to open Admin Panel → Enable All
+                </p>
+              </div>
+              <button
+                onClick={() => strategies.filter(s => !s.enabled).forEach(s => onSaveStrategy({ ...s, enabled: true }))}
+                className="ml-4 shrink-0 min-h-[36px] px-3 text-[11px] font-mono rounded-xl border border-[#00ff8830] text-[#00ff88] bg-[#00ff8808] hover:bg-[#00ff8818] transition-all cursor-pointer"
+              >
+                ▶ Enable All
+              </button>
+            </div>
+          )}
+
           {/* Strategy grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
             {strategies.map(strategy => (
