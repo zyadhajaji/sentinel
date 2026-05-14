@@ -376,14 +376,26 @@ export function PortfolioDashboard({ strategies, positions, stats, solPrice, onC
                   ${displayBalance !== null ? (displayBalance * solPrice).toFixed(2) : '--.--'}
                 </p>
                 {/* Paper PnL chip */}
-                <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono font-bold"
-                  style={{
-                    color: pnlColor,
-                    background: `${pnlColor}12`,
-                    border: `1px solid ${pnlColor}25`
-                  }}>
-                  <span>{totalPnlSol >= 0 ? '+' : ''}{totalPnlSol.toFixed(3)} SOL</span>
-                  <span style={{ color: `${pnlColor}80` }}>paper</span>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono font-bold"
+                    style={{
+                      color: pnlColor,
+                      background: `${pnlColor}12`,
+                      border: `1px solid ${pnlColor}25`
+                    }}>
+                    <span>{totalPnlSol >= 0 ? '+' : ''}{totalPnlSol.toFixed(3)} SOL</span>
+                    <span style={{ color: `${pnlColor}80` }}>paper</span>
+                  </div>
+                  {/* Available capital when fakeBalance is set */}
+                  {fakeBalance !== null && (
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono"
+                      style={{ color: '#555', background: '#0d0d0d', border: '1px solid #1e1e1e' }}>
+                      <span style={{ color: '#00d4ff' }}>
+                        {Math.max(0, fakeBalance - capitalAtRisk).toFixed(3)}
+                      </span>
+                      <span>avail</span>
+                    </div>
+                  )}
                 </div>
               </div>
               {/* Circular gauge */}

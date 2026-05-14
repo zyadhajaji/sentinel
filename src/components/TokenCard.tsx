@@ -41,6 +41,20 @@ const SOURCE_LABELS: Record<string, string> = {
   pumpfun: 'pump', raydium: 'ray', moonshot: 'moon', jupiter: 'jup', unknown: '?',
 }
 
+// Narrative tag colors — consistent per tag
+const NARRATIVE_COLORS: Record<string, string> = {
+  AI:      '#a855f7',
+  MEME:    '#ff8c00',
+  ANIMAL:  '#00d4ff',
+  GAMING:  '#00ff88',
+  DEFI:    '#4ade80',
+  CELEB:   '#ff3355',
+  SPACE:   '#7c3aed',
+  FOOD:    '#fb923c',
+  PATRIOT: '#3b82f6',
+  SOLANA:  '#9945ff',
+}
+
 // ── Compute banner/effects ────────────────────────────────────────────────────
 interface HotState {
   banners: { text: string; color: string; bg: string }[]
@@ -167,19 +181,66 @@ function StarIcon({ filled }: { filled: boolean }) {
   )
 }
 
-// ── Social icon button ────────────────────────────────────────────────────────
-function SocialBtn({ href, label, children }: { href: string; label: string; children: React.ReactNode }) {
+// ── Upgraded Social Pill ───────────────────────────────────────────────────────
+interface SocialPillProps {
+  href: string
+  label: string
+  color: string
+  icon: React.ReactNode
+  text: string
+}
+
+function SocialPill({ href, label, color, icon, text }: SocialPillProps) {
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
       onClick={e => e.stopPropagation()}
-      className="w-6 h-6 flex items-center justify-center rounded-md border border-[#1e1e1e] text-[#555555] hover:text-[#e6e6e6] hover:border-[#333333] transition-all cursor-pointer"
       aria-label={label}
+      className="flex items-center gap-1 px-2 py-0.5 rounded-full border transition-all cursor-pointer select-none"
+      style={{
+        color,
+        borderColor: `${color}30`,
+        background: `${color}0d`,
+      }}
     >
-      {children}
+      <span className="shrink-0">{icon}</span>
+      <span className="text-[9px] font-mono font-medium">{text}</span>
     </a>
+  )
+}
+
+// Extract a short display text from a URL
+function socialHandle(url: string, type: 'twitter' | 'telegram' | 'website' | 'dex'): string {
+  try {
+    const u = new URL(url)
+    if (type === 'twitter') {
+      const seg = u.pathname.replace(/^\//, '').split('/')[0]
+      return seg ? `@${seg.slice(0, 12)}` : 'X'
+    }
+    if (type === 'telegram') {
+      const seg = u.pathname.replace(/^\//, '').split('/')[0]
+      return seg ? `t.me/${seg.slice(0, 10)}` : 'TG'
+    }
+    if (type === 'website') {
+      return u.hostname.replace('www.', '').slice(0, 14)
+    }
+    if (type === 'dex') return 'Chart'
+  } catch { /* noop */ }
+  return type === 'twitter' ? 'X' : type === 'telegram' ? 'TG' : type === 'website' ? 'Web' : 'Chart'
+}
+
+// ── Narrative tag pill ────────────────────────────────────────────────────────
+function NarrativePill({ tag }: { tag: string }) {
+  const color = NARRATIVE_COLORS[tag] ?? '#888888'
+  return (
+    <span
+      className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded-full shrink-0"
+      style={{ color, background: `${color}18`, border: `1px solid ${color}30` }}
+    >
+      {tag}
+    </span>
   )
 }
 
@@ -197,8 +258,10 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
   const pxColor = isUp ? '#00ff88' : '#ff3355'
   const pxSign  = isUp ? '+' : ''
 
-  // Buy pressure color
   const bpColor = signal.buy_pressure >= 65 ? '#ff8c00' : signal.buy_pressure >= 45 ? '#ffcc00' : '#888888'
+
+  const hasSocials = !!(signal.twitter_url || signal.telegram_url || signal.website_url || signal.dex_url)
+  const hasNarratives = signal.narrative_tags && signal.narrative_tags.length > 0
 
   function copyCA(e: React.MouseEvent) {
     e.stopPropagation()
@@ -237,9 +300,9 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
 
         {/* Center info */}
         <div className="flex-1 min-w-0">
-          {/* Row 1: symbol · grade · rug */}
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <span className="font-bold text-[14px] text-[#e8e8e8] tracking-wide truncate" style={{ fontFamily: "'Inter', sans-serif" }}>
+          {/* Row 1: symbol · grade · rug · narrative tags */}
+          <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+            <span className="font-bold text-[14px] text-[#e8e8e8] tracking-wide" style={{ fontFamily: "'Inter', sans-serif" }}>
               {signal.token_symbol}
             </span>
             <span
@@ -256,10 +319,13 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
                 {rug.text}
               </span>
             )}
+            {hasNarratives && signal.narrative_tags.slice(0, 2).map(tag => (
+              <NarrativePill key={tag} tag={tag} />
+            ))}
           </div>
 
-          {/* Row 2: age · CA · source */}
-          <div className="flex items-center gap-1 text-[10px] font-mono text-[#444444] flex-wrap mb-0.5">
+          {/* Row 2: age · CA · source · holders */}
+          <div className="flex items-center gap-1 text-[10px] font-mono text-[#444444] flex-wrap mb-1">
             <span className="text-[#555555]">{ageLabel(signal.contract_age_minutes)}</span>
             <span className="text-[#252525]">·</span>
             <button
@@ -277,46 +343,74 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
             >
               {SOURCE_LABELS[signal.source] ?? signal.source}
             </span>
+            {signal.holders !== null && (
+              <>
+                <span className="text-[#252525]">·</span>
+                <span className="text-[#444444] text-[9px]">
+                  {signal.holders >= 1000 ? `${(signal.holders / 1000).toFixed(1)}K` : signal.holders} holders
+                </span>
+              </>
+            )}
           </div>
 
-          {/* Row 3: socials · holders */}
-          <div className="flex items-center gap-1">
-            {signal.twitter_url && (
-              <SocialBtn href={signal.twitter_url} label="Twitter">
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.63zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                </svg>
-              </SocialBtn>
-            )}
-            {signal.telegram_url && (
-              <SocialBtn href={signal.telegram_url} label="Telegram">
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/>
-                </svg>
-              </SocialBtn>
-            )}
-            {signal.website_url && (
-              <SocialBtn href={signal.website_url} label="Website">
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
-                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                </svg>
-              </SocialBtn>
-            )}
-            {signal.dex_url && (
-              <SocialBtn href={signal.dex_url} label="DEX">
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                  <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-                </svg>
-              </SocialBtn>
-            )}
-            {signal.holders !== null && (
-              <span className="ml-1 text-[10px] font-mono text-[#444444]">
-                👥 {signal.holders >= 1000 ? `${(signal.holders / 1000).toFixed(1)}K` : signal.holders}
-              </span>
-            )}
-          </div>
+          {/* Row 3: social pills */}
+          {hasSocials && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {signal.twitter_url && (
+                <SocialPill
+                  href={signal.twitter_url}
+                  label="Twitter / X"
+                  color="#1D9BF0"
+                  text={socialHandle(signal.twitter_url, 'twitter')}
+                  icon={
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.63zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                    </svg>
+                  }
+                />
+              )}
+              {signal.telegram_url && (
+                <SocialPill
+                  href={signal.telegram_url}
+                  label="Telegram"
+                  color="#229ED9"
+                  text={socialHandle(signal.telegram_url, 'telegram')}
+                  icon={
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/>
+                    </svg>
+                  }
+                />
+              )}
+              {signal.website_url && (
+                <SocialPill
+                  href={signal.website_url}
+                  label="Website"
+                  color="#6b7280"
+                  text={socialHandle(signal.website_url, 'website')}
+                  icon={
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                    </svg>
+                  }
+                />
+              )}
+              {signal.dex_url && (
+                <SocialPill
+                  href={signal.dex_url}
+                  label="DEX Chart"
+                  color="#9945ff"
+                  text="Chart"
+                  icon={
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                    </svg>
+                  }
+                />
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right: sparkline + compact 2-line stats */}
@@ -347,7 +441,7 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
         </div>
       </div>
 
-      {/* ── Section B: Bottom strip (one row) ───────────────────────────── */}
+      {/* ── Section B: Bottom strip ──────────────────────────────────────── */}
       <div className="flex items-center gap-2 border-t border-[#181818] pt-2 mt-0 mx-2.5 mb-2.5">
         {/* LEFT: BP bar + % */}
         <div className="flex-1 flex items-center gap-1.5 min-w-0">
@@ -364,7 +458,7 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
           <span className="text-[9px] font-mono shrink-0" style={{ color: bpColor }}>{signal.buy_pressure}%</span>
         </div>
 
-        {/* MIDDLE: price change chip */}
+        {/* price change chip */}
         <span
           className="text-[9px] font-mono px-2 py-0.5 rounded-full font-bold shrink-0"
           style={{ color: pxColor, background: `${pxColor}15`, border: `1px solid ${pxColor}30` }}
@@ -372,7 +466,7 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
           {pxSign}{signal.price_change_1h.toFixed(1)}%
         </span>
 
-        {/* RIGHT: score expand · star · BUY */}
+        {/* score expand · star · BUY */}
         <button
           onClick={(e) => { e.stopPropagation(); setShowBreakdown(v => !v) }}
           className="text-[10px] font-mono text-[#333333] hover:text-[#666666] transition-colors h-7 px-2 flex items-center gap-1 cursor-pointer rounded-lg shrink-0"

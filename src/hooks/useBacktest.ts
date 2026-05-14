@@ -32,7 +32,7 @@ function mergeStrategies(saved: Strategy[]): Strategy[] {
   return result
 }
 
-export function useBacktest(signals: Signal[]) {
+export function useBacktest(signals: Signal[], maxCapital?: number) {
   const [strategies, setStrategies] = useState<Strategy[]>(() =>
     mergeStrategies(loadStorage<Strategy[]>(storageKey('sentinel_strategies'), []))
   )
@@ -63,8 +63,17 @@ export function useBacktest(signals: Signal[]) {
     processedSignals.current.add(latest.id)
 
     const newPositions: Position[] = []
+    const currentOpenCapital = positions
+      .filter(p => p.status === 'open')
+      .reduce((s, p) => s + p.positionSizeSol * (p.remainingPct / 100), 0)
+
     for (const strategy of strategies) {
       if (!evaluateEntry(strategy, latest)) continue
+      // Respect capital limit — don't open if it would exceed available funds
+      if (maxCapital !== undefined) {
+        const committed = newPositions.reduce((s, p) => s + p.positionSizeSol, 0)
+        if (currentOpenCapital + committed + strategy.positionSizeSol > maxCapital) continue
+      }
       newPositions.push({
         id: genPositionId(),
         strategyId: strategy.id,

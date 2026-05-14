@@ -5,6 +5,7 @@ import { requestNotificationPermission } from '../lib/alertEngine'
 import { TokenCard } from './TokenCard'
 import { useWatchlist } from '../contexts/WatchlistContext'
 import { loadStorage, saveStorage } from '../lib/storage'
+import { storageKey } from '../lib/appMode'
 
 interface Props {
   signals: Signal[]
@@ -18,17 +19,45 @@ interface Props {
   onRemoveWatchedCA: (ca: string) => void
 }
 
-const GRADE_FILTER_OPTIONS = ['ALL', 'SAFE', 'WATCH', 'RISK', 'STARRED'] as const
-type GradeFilter = typeof GRADE_FILTER_OPTIONS[number]
+// ── MC Tier filter ─────────────────────────────────────────────────────────────
+// SAFE  = high market cap tokens (≥ $500K) — relatively established
+// WATCH = mid-tier tokens (≥ $7K)
+// RISK  = instant/new launches (< $7K or age ≤ 5 min)
+const MC_FILTER_OPTIONS = ['ALL', 'SAFE', 'WATCH', 'RISK', 'STARRED'] as const
+type McFilter = typeof MC_FILTER_OPTIONS[number]
 
-const GRADE_COLORS: Record<string, string> = {
+const MC_COLORS: Record<string, string> = {
   SAFE: '#00ff88',
   WATCH: '#ffcc00',
   RISK: '#ff3355',
   STARRED: '#ffcc00',
 }
 
-// SVG icon helpers
+const MC_LABELS: Record<string, string> = {
+  ALL:     'ALL',
+  SAFE:    'SAFE',    // ≥$500K MC
+  WATCH:   'WATCH',   // ≥$7K MC
+  RISK:    'RISK',    // <$7K or instant
+  STARRED: '★',
+}
+
+const MC_HINTS: Record<string, string> = {
+  SAFE:  '≥$500K',
+  WATCH: '≥$7K',
+  RISK:  '<$7K',
+}
+
+function matchesMcFilter(signal: Signal, filter: McFilter, watchlist: Set<string>): boolean {
+  switch (filter) {
+    case 'ALL':     return true
+    case 'SAFE':    return signal.mcap_usd >= 500_000
+    case 'WATCH':   return signal.mcap_usd >= 7_000
+    case 'RISK':    return signal.mcap_usd < 7_000 || signal.contract_age_minutes <= 5
+    case 'STARRED': return watchlist.has(signal.ca)
+  }
+}
+
+// ── SVG icon helpers ───────────────────────────────────────────────────────────
 function IconSound({ on }: { on: boolean }) {
   return on ? (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -44,7 +73,7 @@ function IconSound({ on }: { on: boolean }) {
   )
 }
 
-function IconVibrate({ on: _on }: { on: boolean }) {
+function IconVibrate() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M6 5v14"/><path d="M18 5v14"/>
@@ -87,7 +116,7 @@ function AlertPanel({ settings, onChange }: { settings: AlertSettings; onChange:
           className={`flex items-center gap-2 px-3 py-2.5 rounded border text-[11px] font-mono min-h-[44px] transition-all cursor-pointer ${
             settings.vibrationEnabled ? 'border-[#00ff8840] text-[#00ff88] bg-[#00ff8808]' : 'border-[#1e1e1e] text-[#555555]'
           }`}>
-          <IconVibrate on={settings.vibrationEnabled} />
+          <IconVibrate />
           <span>Vibrate</span>
         </button>
         <button onClick={() => set({ safeEnabled: !settings.safeEnabled })}
@@ -128,25 +157,34 @@ function AlertPanel({ settings, onChange }: { settings: AlertSettings; onChange:
 }
 
 export function SignalFeed({ signals, newSignalId, onTrade, onDetail, alertSettings, onAlertSettingsChange, watchedCAs }: Props) {
-  const [filter, setFilter] = useState<GradeFilter>(() => loadStorage<GradeFilter>('sentinel_filter', 'ALL'))
+  const [filter, setFilter] = useState<McFilter>(() => loadStorage<McFilter>(storageKey('sentinel_filter'), 'ALL'))
+  const [search, setSearch] = useState('')
   const [showAlerts, setShowAlerts] = useState(false)
   const { watchlist } = useWatchlist()
 
-  function handleFilterChange(f: GradeFilter) {
+  function handleFilterChange(f: McFilter) {
     setFilter(f)
-    saveStorage('sentinel_filter', f)
+    saveStorage(storageKey('sentinel_filter'), f)
   }
 
-  const filtered = filter === 'ALL'
-    ? signals
-    : filter === 'STARRED'
-      ? signals.filter(s => watchlist.has(s.ca))
-      : signals.filter(s => s.score_grade === filter)
+  // Apply MC-tier filter first
+  const mcFiltered = signals.filter(s => matchesMcFilter(s, filter, watchlist))
 
+  // Then apply search (name, symbol, or CA)
+  const q = search.trim().toLowerCase()
+  const filtered = q
+    ? mcFiltered.filter(s =>
+        s.token_symbol.toLowerCase().includes(q) ||
+        s.token_name.toLowerCase().includes(q) ||
+        s.ca.toLowerCase().includes(q)
+      )
+    : mcFiltered
+
+  // Counts per tier
   const counts = {
-    SAFE: signals.filter(s => s.score_grade === 'SAFE').length,
-    WATCH: signals.filter(s => s.score_grade === 'WATCH').length,
-    RISK: signals.filter(s => s.score_grade === 'RISK').length,
+    SAFE:    signals.filter(s => s.mcap_usd >= 500_000).length,
+    WATCH:   signals.filter(s => s.mcap_usd >= 7_000).length,
+    RISK:    signals.filter(s => s.mcap_usd < 7_000 || s.contract_age_minutes <= 5).length,
     STARRED: watchlist.size,
   }
 
@@ -154,50 +192,102 @@ export function SignalFeed({ signals, newSignalId, onTrade, onDetail, alertSetti
 
   return (
     <div className="flex flex-col h-full">
-      {/* Feed header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a] shrink-0 bg-[#080808]">
-        <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-[#00ff88] animate-pulse-green" />
-          <span className="text-[11px] font-mono text-[#888888] tracking-wider">LIVE FEED</span>
-          <span className="text-[11px] font-mono text-[#333333]">·</span>
-          <span className="text-[11px] font-mono text-[#555555] tabular-nums">{signals.length} signals</span>
-          {watchedCAs.length > 0 && (
-            <span className="text-[10px] font-mono text-[#00d4ff] bg-[#00d4ff10] px-1.5 py-0.5 rounded">
-              {watchedCAs.length} watched
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setShowAlerts(v => !v)}
-            className={`text-[13px] min-h-[36px] min-w-[36px] flex items-center justify-center rounded border transition-all mr-1 cursor-pointer ${
-              showAlerts ? 'border-[#2a2a2a] bg-[#141414]' : 'border-transparent'
-            } ${alertsOn ? 'text-[#00d4ff]' : 'text-[#444444]'}`}
-            aria-label="Alert settings"
-          >
-            <IconBell on={alertsOn} />
-          </button>
-          {GRADE_FILTER_OPTIONS.map(opt => (
+      {/* ── Feed header ──────────────────────────────────────────────────────── */}
+      <div className="border-b border-[#1a1a1a] shrink-0 bg-[#080808]">
+        {/* Top row: live dot + signal count + alert toggle + filter tabs */}
+        <div className="flex items-center justify-between px-4 py-2.5 gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#00ff88] animate-pulse-green" />
+            <span className="text-[11px] font-mono text-[#888888] tracking-wider">LIVE</span>
+            <span className="text-[11px] font-mono text-[#444444] tabular-nums">{signals.length}</span>
+            {watchedCAs.length > 0 && (
+              <span className="text-[10px] font-mono text-[#00d4ff] bg-[#00d4ff10] px-1.5 py-0.5 rounded">
+                {watchedCAs.length} watched
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1">
             <button
-              key={opt}
-              onClick={() => handleFilterChange(opt)}
-              className={`text-[11px] font-mono px-2.5 py-1.5 rounded min-h-[36px] transition-all cursor-pointer ${
-                filter === opt
-                  ? 'bg-[#141414] text-[#e6e6e6] border border-[#2a2a2a]'
-                  : 'text-[#444444] hover:text-[#888888] border border-transparent'
-              }`}
-              style={filter === opt && opt !== 'ALL' ? { color: GRADE_COLORS[opt] } : undefined}
+              onClick={() => setShowAlerts(v => !v)}
+              className={`text-[13px] min-h-[36px] min-w-[36px] flex items-center justify-center rounded border transition-all mr-0.5 cursor-pointer ${
+                showAlerts ? 'border-[#2a2a2a] bg-[#141414]' : 'border-transparent'
+              } ${alertsOn ? 'text-[#00d4ff]' : 'text-[#444444]'}`}
+              aria-label="Alert settings"
             >
-              {opt === 'STARRED' ? (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill={filter === opt ? '#ffcc00' : 'none'} stroke="#ffcc00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline' }}>
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                </svg>
-              ) : opt}
-              {opt !== 'ALL' && counts[opt as keyof typeof counts] > 0 && (
-                <span className="ml-1 opacity-60 tabular-nums">{counts[opt as keyof typeof counts]}</span>
-              )}
+              <IconBell on={alertsOn} />
             </button>
-          ))}
+
+            {MC_FILTER_OPTIONS.map(opt => (
+              <button
+                key={opt}
+                onClick={() => handleFilterChange(opt)}
+                className={`relative text-[10px] font-mono px-2 py-1.5 rounded min-h-[32px] transition-all cursor-pointer ${
+                  filter === opt
+                    ? 'bg-[#141414] border border-[#2a2a2a]'
+                    : 'text-[#444444] hover:text-[#888888] border border-transparent'
+                }`}
+                style={filter === opt && opt !== 'ALL' ? { color: MC_COLORS[opt] } : filter === opt ? { color: '#e6e6e6' } : undefined}
+                title={MC_HINTS[opt]}
+              >
+                {opt === 'STARRED' ? (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill={filter === opt ? '#ffcc00' : 'none'} stroke="#ffcc00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline' }}>
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                  </svg>
+                ) : (
+                  <span>{MC_LABELS[opt]}</span>
+                )}
+                {opt !== 'ALL' && opt !== 'STARRED' && counts[opt as keyof typeof counts] > 0 && (
+                  <span className="ml-0.5 opacity-50 tabular-nums">{counts[opt as keyof typeof counts]}</span>
+                )}
+                {opt === 'STARRED' && watchlist.size > 0 && (
+                  <span className="ml-0.5 opacity-50 tabular-nums">{watchlist.size}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Search bar */}
+        <div className="px-3 pb-2.5">
+          <div className="relative">
+            <svg
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+              width="12" height="12" viewBox="0 0 24 24" fill="none"
+              stroke="#444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search symbol, name, or CA…"
+              className="w-full bg-[#0d0d0d] border border-[#1a1a1a] rounded-lg pl-8 pr-8 py-2 text-[11px] font-mono text-[#e6e6e6] placeholder-[#333] outline-none focus:border-[#2a2a2a] transition-colors"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#444] hover:text-[#888] transition-colors cursor-pointer"
+                aria-label="Clear search"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            )}
+          </div>
+          {/* MC tier label below search bar when a tier is selected */}
+          {filter !== 'ALL' && filter !== 'STARRED' && (
+            <div className="flex items-center gap-1.5 mt-1.5 px-0.5">
+              <span className="text-[9px] font-mono uppercase tracking-widest" style={{ color: MC_COLORS[filter] }}>
+                {filter}
+              </span>
+              <span className="text-[9px] font-mono text-[#333]">{MC_HINTS[filter]} market cap</span>
+              <span className="text-[9px] font-mono text-[#333]">·</span>
+              <span className="text-[9px] font-mono text-[#444] tabular-nums">{filtered.length} signals</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -205,7 +295,7 @@ export function SignalFeed({ signals, newSignalId, onTrade, onDetail, alertSetti
         <AlertPanel settings={alertSettings} onChange={onAlertSettingsChange} />
       )}
 
-      {/* Scrollable signal list */}
+      {/* ── Scrollable signal list ────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto overscroll-contain">
         <div className="p-3 space-y-2.5">
           {filtered.map(signal => (
@@ -222,12 +312,22 @@ export function SignalFeed({ signals, newSignalId, onTrade, onDetail, alertSetti
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#333333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 {filter === 'STARRED'
                   ? <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                  : <><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></>
+                  : q
+                    ? <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>
+                    : <><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></>
                 }
               </svg>
               <span className="text-[#444444] text-sm font-mono">
-                {filter === 'STARRED' ? 'No starred tokens yet' : `No ${filter} signals yet`}
+                {filter === 'STARRED' ? 'No starred tokens yet'
+                  : q ? `No results for "${search}"`
+                  : `No ${filter} signals yet`}
               </span>
+              {q && (
+                <button onClick={() => setSearch('')}
+                  className="text-[11px] font-mono text-[#555] hover:text-[#888] cursor-pointer transition-colors">
+                  Clear search
+                </button>
+              )}
             </div>
           )}
         </div>
