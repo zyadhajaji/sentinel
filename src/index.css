@@ -1,27 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-* {
-  box-sizing: border-box;
-}
-
+/* ── Design Tokens ─────────────────────────────────────────────────────────── */
 :root {
-  --safe-top: env(safe-area-inset-top, 0px);
+  /* Surfaces */
+  --bg:        #080808;
+  --surface-1: #0f0f0f;
+  --surface-2: #141414;
+  --surface-3: #1a1a1a;
+
+  /* Borders */
+  --border-1:  #1a1a1a;
+  --border-2:  #252525;
+  --border-3:  #333333;
+
+  /* Text */
+  --text:      #e6e6e6;
+  --text-2:    #999999;
+  --text-3:    #555555;
+  --text-4:    #333333;
+
+  /* Brand */
+  --cyan:      #00d4ff;
+  --cyan-dim:  rgba(0, 212, 255, 0.08);
+  --green:     #00ff88;
+  --green-dim: rgba(0, 255, 136, 0.08);
+  --red:       #ff3355;
+  --red-dim:   rgba(255, 51, 85, 0.08);
+  --gold:      #ffd700;
+  --gold-dim:  rgba(255, 215, 0, 0.08);
+  --amber:     #ffcc00;
+
+  /* Typography */
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body:    'Inter', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Consolas', monospace;
+
+  /* Spacing (4px grid) */
+  --sp-1: 4px;   --sp-2: 8px;   --sp-3: 12px;  --sp-4: 16px;
+  --sp-5: 20px;  --sp-6: 24px;  --sp-8: 32px;  --sp-10: 40px;
+
+  /* Radii */
+  --r-sm: 6px;   --r-md: 10px;  --r-lg: 14px;  --r-xl: 18px;
+
+  /* Transitions */
+  --ease-out: cubic-bezier(0.0, 0.0, 0.2, 1);
+  --ease-in:  cubic-bezier(0.4, 0.0, 1, 1);
+  --t-fast:   150ms;
+  --t-base:   200ms;
+  --t-slow:   300ms;
+
+  /* Safe areas */
+  --safe-top:    env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-left: env(safe-area-inset-left, 0px);
-  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-left:   env(safe-area-inset-left, 0px);
+  --safe-right:  env(safe-area-inset-right, 0px);
   --bottom-nav-h: 56px;
 }
 
+/* ── Reset ──────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
 html {
   height: -webkit-fill-available;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background-color: #0a0a0a;
-  color: #e6e6e6;
-  font-family: 'Space Mono', monospace;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
   margin: 0;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
@@ -31,108 +84,130 @@ body {
   min-height: -webkit-fill-available;
 }
 
+/* ── Typography ─────────────────────────────────────────────────────────────── */
+.font-display { font-family: var(--font-display); }
+.font-mono    { font-family: var(--font-mono); }
+.font-body    { font-family: var(--font-body); }
+
+/* ── Touch targets ──────────────────────────────────────────────────────────── */
 button, a, [role="button"] {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Thin scrollbar on desktop, hidden on mobile */
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+/* Focus rings — visible for keyboard nav */
+button:focus-visible,
+input:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #2a2a2a;
-  border-radius: 2px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #444444;
-}
+/* ── Scrollbars ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-3); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 
 @media (max-width: 767px) {
-  ::-webkit-scrollbar {
-    display: none;
-  }
-
-  * {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
+  ::-webkit-scrollbar { display: none; }
+  * { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
-/* Safe area utilities */
-.pb-safe {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
+/* ── Safe-area utilities ────────────────────────────────────────────────────── */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+.bottom-nav { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
-.pt-safe {
-  padding-top: env(safe-area-inset-top, 0px);
-}
-
-.bottom-nav {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-/* Horizontal scrollable table container */
+/* ── Table scroll ───────────────────────────────────────────────────────────── */
 .table-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
-/* Score ring */
+/* ── Card interactions ──────────────────────────────────────────────────────── */
+.card-hover {
+  transition: border-color var(--t-fast) var(--ease-out),
+              box-shadow  var(--t-fast) var(--ease-out);
+}
+.card-hover:hover {
+  border-color: var(--border-2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Glow effects ───────────────────────────────────────────────────────────── */
+.glow-cyan  { box-shadow: 0 0 12px rgba(0, 212, 255, 0.12); }
+.glow-green { box-shadow: 0 0 12px rgba(0, 255, 136, 0.10); }
+.glow-red   { box-shadow: 0 0 10px rgba(255, 51,  85,  0.10); }
+
+/* ── Animations ─────────────────────────────────────────────────────────────── */
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.4); }
+  50%       { opacity: 0.8; box-shadow: 0 0 0 4px rgba(0, 255, 136, 0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.animate-pulse-green { animation: pulse-green 2.5s ease-in-out infinite; }
+.animate-fade-in     { animation: fade-in 200ms var(--ease-out) forwards; }
+.animate-slide-up    { animation: slide-in-up 200ms var(--ease-out) forwards; }
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Wallet adapter overrides ───────────────────────────────────────────────── */
+.wallet-adapter-modal-wrapper { font-family: var(--font-mono); }
+.wallet-adapter-modal          { background: #0f0f0f !important; border: 1px solid #222 !important; }
+.wallet-adapter-modal-title    { color: var(--text) !important; }
+.wallet-adapter-modal-list .wallet-adapter-button {
+  background: #141414 !important;
+  color: var(--text) !important;
+  border: 1px solid #222 !important;
+}
+.wallet-adapter-modal-list .wallet-adapter-button:hover {
+  background: #1a1a1a !important;
+  border-color: #333 !important;
+}
+
+/* ── Skeleton loader ────────────────────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--r-sm);
+}
+
+/* ── Number formatting ──────────────────────────────────────────────────────── */
+.tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* ── Score ring ─────────────────────────────────────────────────────────────── */
 .score-ring {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-/* Wallet adapter modal */
-.wallet-adapter-modal-wrapper {
-  font-family: 'Space Mono', monospace;
-}
-
-.wallet-adapter-modal {
-  background: #0f0f0f !important;
-  border: 1px solid #222222 !important;
-}
-
-.wallet-adapter-modal-title {
-  color: #e6e6e6 !important;
-}
-
-.wallet-adapter-modal-list .wallet-adapter-button {
-  background: #141414 !important;
-  color: #e6e6e6 !important;
-  border: 1px solid #222222 !important;
-}
-
-.wallet-adapter-modal-list .wallet-adapter-button:hover {
-  background: #1a1a1a !important;
-  border-color: #333333 !important;
-}
-
-/* Neon glow effects */
-.glow-cyan {
-  box-shadow: 0 0 12px rgba(0, 212, 255, 0.15);
-}
-
-.glow-green {
-  box-shadow: 0 0 12px rgba(0, 255, 136, 0.12);
-}
-
-/* Card hover lift */
-.card-hover {
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-}
-
-.card-hover:hover {
-  border-color: #2a2a2a;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
 }

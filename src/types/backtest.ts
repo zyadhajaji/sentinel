@@ -62,6 +62,9 @@ export interface Strategy {
   filters: StrategyFilters
   exit: StrategyExit
   positionSizeSol: number
+  locked?: boolean
+  description?: string
+  autoTrade?: boolean
 }
 
 export type PositionStatus = 'open' | 'closed_tp' | 'closed_sl' | 'closed_timeout' | 'closed_rug'

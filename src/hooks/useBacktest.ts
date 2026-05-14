@@ -3,16 +3,58 @@ import type { Signal } from '../types'
 import type { Strategy, Position, StrategyStats } from '../types/backtest'
 import { DEFAULT_STRATEGIES, evaluateEntry, processExits, calcStats, genPositionId } from '../lib/strategyEngine'
 import { fetchTokenPairs } from '../lib/dexscreener'
+import { loadStorage, saveStorage } from '../lib/storage'
 
 const PRICE_POLL_MS = 30_000
 const MAX_POSITIONS = 500
 
+export interface BotActivity {
+  totalTrades: number
+  lastTradeTime: string | null
+  lastTickTime: string | null
+  isRunning: boolean
+}
+
+function mergeStrategies(saved: Strategy[]): Strategy[] {
+  if (saved.length === 0) return DEFAULT_STRATEGIES
+  const lockedMap = new Map(DEFAULT_STRATEGIES.filter(s => s.locked).map(s => [s.id, s]))
+  // Keep preset definitions authoritative for locked strategies, but preserve enabled state from saved
+  const result: Strategy[] = DEFAULT_STRATEGIES.map(s => {
+    if (!s.locked) return s
+    const savedVersion = saved.find(sv => sv.id === s.id)
+    return savedVersion ? { ...s, enabled: savedVersion.enabled, autoTrade: savedVersion.autoTrade } : s
+  })
+  // Append custom (non-locked) strategies from saved
+  for (const sv of saved) {
+    if (!lockedMap.has(sv.id)) result.push(sv)
+  }
+  return result
+}
+
 export function useBacktest(signals: Signal[]) {
-  const [strategies, setStrategies] = useState<Strategy[]>(DEFAULT_STRATEGIES)
-  const [positions, setPositions] = useState<Position[]>([])
+  const [strategies, setStrategies] = useState<Strategy[]>(() =>
+    mergeStrategies(loadStorage<Strategy[]>('sentinel_strategies', []))
+  )
+  const [positions, setPositions] = useState<Position[]>(() =>
+    loadStorage<Position[]>('sentinel_positions', [])
+  )
   const [stats, setStats] = useState<Record<string, StrategyStats>>({})
+  const [botActivity, setBotActivity] = useState<BotActivity>(() => ({
+    totalTrades: 0,
+    lastTradeTime: loadStorage<string | null>('sentinel_last_trade_time', null),
+    lastTickTime: null,
+    isRunning: true,
+  }))
+
   const processedSignals = useRef<Set<string>>(new Set())
 
+  useEffect(() => { saveStorage('sentinel_strategies', strategies) }, [strategies])
+  useEffect(() => { saveStorage('sentinel_positions', positions) }, [positions])
+  useEffect(() => {
+    if (botActivity.lastTradeTime) saveStorage('sentinel_last_trade_time', botActivity.lastTradeTime)
+  }, [botActivity.lastTradeTime])
+
+  // Process new signals → open positions
   useEffect(() => {
     const latest = signals[0]
     if (!latest || processedSignals.current.has(latest.id)) return
@@ -55,17 +97,22 @@ export function useBacktest(signals: Signal[]) {
 
     if (newPositions.length > 0) {
       setPositions(prev => [...newPositions, ...prev].slice(0, MAX_POSITIONS))
+      setBotActivity(prev => ({
+        ...prev,
+        totalTrades: prev.totalTrades + newPositions.length,
+        lastTradeTime: new Date().toISOString(),
+      }))
     }
   }, [signals, strategies])
 
+  // Recalculate stats whenever positions or strategies change
   useEffect(() => {
     const newStats: Record<string, StrategyStats> = {}
-    for (const s of strategies) {
-      newStats[s.id] = calcStats(s.id, positions)
-    }
+    for (const s of strategies) newStats[s.id] = calcStats(s.id, positions)
     setStats(newStats)
   }, [positions, strategies])
 
+  // Live price polling — runs in background even when tab is not focused
   useEffect(() => {
     let active = true
 
@@ -73,6 +120,8 @@ export function useBacktest(signals: Signal[]) {
       const openPositions = positions.filter(p => p.status === 'open')
       const uniqueCAs = [...new Set(openPositions.map(p => p.ca))]
       if (uniqueCAs.length === 0) return
+
+      setBotActivity(prev => ({ ...prev, lastTickTime: new Date().toISOString() }))
 
       const priceMap: Record<string, { price: number; mcap: number }> = {}
       for (let i = 0; i < uniqueCAs.length; i += 5) {
@@ -105,8 +154,24 @@ export function useBacktest(signals: Signal[]) {
     return () => { active = false; clearInterval(timer) }
   }, [positions, strategies])
 
+  // Keep bot running indicator alive
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setBotActivity(prev => ({ ...prev, isRunning: true }))
+    }, 10_000)
+    return () => clearInterval(timer)
+  }, [])
+
   const updateStrategy = useCallback((updated: Strategy) => {
-    setStrategies(prev => prev.map(s => s.id === updated.id ? updated : s))
+    setStrategies(prev => prev.map(s => (s.id === updated.id && !s.locked) ? updated : s))
+  }, [])
+
+  const toggleAutoTrade = useCallback((id: string) => {
+    setStrategies(prev => prev.map(s => s.id === id ? { ...s, autoTrade: !s.autoTrade } : s))
+  }, [])
+
+  const updateStrategyEnabled = useCallback((id: string, enabled: boolean) => {
+    setStrategies(prev => prev.map(s => s.id === id ? { ...s, enabled } : s))
   }, [])
 
   const addStrategy = useCallback((strategy: Strategy) => {
@@ -114,14 +179,19 @@ export function useBacktest(signals: Signal[]) {
   }, [])
 
   const deleteStrategy = useCallback((id: string) => {
-    setStrategies(prev => prev.filter(s => s.id !== id))
+    setStrategies(prev => prev.filter(s => s.id !== id || s.locked))
     setPositions(prev => prev.filter(p => p.strategyId !== id))
   }, [])
 
   const clearPositions = useCallback(() => {
     setPositions([])
     processedSignals.current.clear()
+    setBotActivity(prev => ({ ...prev, totalTrades: 0 }))
   }, [])
 
-  return { strategies, positions, stats, updateStrategy, addStrategy, deleteStrategy, clearPositions }
+  return {
+    strategies, positions, stats, botActivity,
+    updateStrategy, toggleAutoTrade, updateStrategyEnabled,
+    addStrategy, deleteStrategy, clearPositions,
+  }
 }

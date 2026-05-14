@@ -11,15 +11,15 @@ export default {
       },
       colors: {
         bg: {
-          primary: '#0a0a0a',
-          secondary: '#111111',
-          tertiary: '#1a1a1a',
-          card: '#141414',
-          hover: '#1e1e1e',
+          primary: '#080808',
+          secondary: '#0f0f0f',
+          tertiary: '#141414',
+          card: '#111111',
+          hover: '#1a1a1a',
         },
         border: {
-          DEFAULT: '#1e1e1e',
-          bright: '#2a2a2a',
+          DEFAULT: '#1a1a1a',
+          bright: '#252525',
           active: '#333333',
         },
         text: {
@@ -43,9 +43,9 @@ export default {
         },
       },
       fontFamily: {
-        display: ['Orbitron', 'monospace'],
-        mono: ['Space Mono', 'monospace'],
-        sans: ['Space Mono', 'monospace'],
+        display: ['Space Grotesk', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Space Mono', 'Consolas', 'monospace'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
       },
       spacing: {
         'safe-bottom': 'env(safe-area-inset-bottom, 0px)',

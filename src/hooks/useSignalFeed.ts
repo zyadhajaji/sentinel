@@ -249,5 +249,45 @@ export function useSignalFeed() {
     return () => { active = false; clearInterval(timer) }
   }, [])
 
-  return { signals, newSignalId, connected, alertSettings, setAlertSettings }
+  // ── Custom CA Watchlist ───────────────────────────────────────────────────
+  const [watchedCAs, setWatchedCAs] = useState<string[]>(() =>
+    loadStorage<string[]>('sentinel_watched_cas', [])
+  )
+  useEffect(() => { saveStorage('sentinel_watched_cas', watchedCAs) }, [watchedCAs])
+
+  useEffect(() => {
+    if (watchedCAs.length === 0) return
+    let active = true
+
+    async function pollWatched() {
+      for (const ca of watchedCAs) {
+        if (!active) break
+        try {
+          const pair = await fetchTokenPairs(ca)
+          if (!pair) continue
+          const signal = pairToSignal(pair, undefined, solPriceRef.current)
+          // Force-refresh: clear from seenCAs so watched CAs always update
+          seenCAs.current.delete(ca)
+          addSignal(signal)
+        } catch {}
+        await new Promise(r => setTimeout(r, 500))
+      }
+    }
+
+    pollWatched()
+    const timer = setInterval(pollWatched, 60_000)
+    return () => { active = false; clearInterval(timer) }
+  }, [watchedCAs, addSignal])
+
+  const addWatchedCA = useCallback((ca: string) => {
+    const trimmed = ca.trim()
+    if (!trimmed) return
+    setWatchedCAs(prev => [...new Set([...prev, trimmed])])
+  }, [])
+
+  const removeWatchedCA = useCallback((ca: string) => {
+    setWatchedCAs(prev => prev.filter(c => c !== ca))
+  }, [])
+
+  return { signals, newSignalId, connected, alertSettings, setAlertSettings, solPrice, watchedCAs, addWatchedCA, removeWatchedCA }
 }
