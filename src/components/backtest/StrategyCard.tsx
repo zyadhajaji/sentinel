@@ -8,136 +8,236 @@ interface Props {
   onToggleAutoTrade: (id: string) => void
 }
 
-function StatBox({ label, value, color }: { label: string; value: string; color?: string }) {
+// ── Mini sparkline SVG from equity curve ─────────────────────────────────────
+function Sparkline({ data, color }: { data: number[]; color: string }) {
+  if (data.length < 2) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <span className="text-[10px] font-mono text-[#2a2a2a]">no data yet</span>
+      </div>
+    )
+  }
+
+  const W = 200
+  const H = 36
+  const min = Math.min(...data)
+  const max = Math.max(...data)
+  const range = max - min || 1
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * W
+    const y = H - ((v - min) / range) * H
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+  const polyline = pts.join(' ')
+  const lastPt = pts[pts.length - 1]!.split(',')
+  const isPositive = data[data.length - 1]! >= data[0]!
+
   return (
-    <div className="bg-[#0d0d0d] rounded-lg p-2.5">
-      <p className="text-[10px] text-[#444444] uppercase tracking-wider mb-1">{label}</p>
-      <p className="text-[13px] font-mono font-bold tabular-nums" style={{ color: color ?? '#e6e6e6' }}>{value}</p>
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-full">
+      {/* Zero line */}
+      {min < 0 && max > 0 && (
+        <line
+          x1={0} x2={W}
+          y1={H - ((0 - min) / range) * H}
+          y2={H - ((0 - min) / range) * H}
+          stroke="#333333" strokeWidth="0.5" strokeDasharray="2,2"
+        />
+      )}
+      {/* Area fill */}
+      <polygon
+        points={`0,${H} ${polyline} ${W},${H}`}
+        fill={color}
+        opacity="0.06"
+      />
+      {/* Line */}
+      <polyline points={polyline} fill="none" stroke={color} strokeWidth="1.2" opacity="0.7" />
+      {/* Last dot */}
+      <circle cx={lastPt[0]} cy={lastPt[1]} r="2" fill={isPositive ? color : '#ff3355'} />
+    </svg>
+  )
+}
+
+// ── Win rate bar ─────────────────────────────────────────────────────────────
+function WinRateBar({ rate, wins, losses }: { rate: number; wins: number; losses: number }) {
+  const color = rate >= 60 ? '#00ff88' : rate >= 40 ? '#ffcc00' : '#ff3355'
+  const total = wins + losses
+  return (
+    <div>
+      <div className="flex justify-between mb-1">
+        <span className="text-[10px] font-mono text-[#444444]">Win Rate</span>
+        <span className="text-[10px] font-mono tabular-nums" style={{ color: total > 0 ? color : '#333333' }}>
+          {total > 0 ? `${rate.toFixed(0)}%` : '—'}
+          {total > 0 && <span className="text-[#333333] ml-1">({wins}W / {losses}L)</span>}
+        </span>
+      </div>
+      <div className="h-1 bg-[#1a1a1a] rounded-full overflow-hidden">
+        {total > 0 && (
+          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${rate}%`, background: color, opacity: 0.7 }} />
+        )}
+      </div>
     </div>
   )
 }
 
 export function StrategyCard({ strategy, stats, onToggle, onEdit, onToggleAutoTrade }: Props) {
   const pnlColor = stats.totalPnlSol >= 0 ? '#00ff88' : '#ff3355'
-  const winColor = stats.winRate >= 60 ? '#00ff88' : stats.winRate >= 40 ? '#ffcc00' : '#ff3355'
-  const activeProtocols = Object.entries(strategy.filters.protocols).filter(([, v]) => v).map(([k]) => k)
   const isAnakin = strategy.id === 'anakin'
+  const hasData = stats.totalTrades > 0
+  const activeProtocols = Object.entries(strategy.filters.protocols).filter(([, v]) => v).map(([k]) => k)
+
+  const tpTags = strategy.exit.takeProfitLevels.map((tp, i) =>
+    `TP${i + 1}:${tp.type === 'percent' ? `+${tp.value}%` : `$${(tp.value / 1000).toFixed(0)}K`}`
+  )
+  const slTag = strategy.exit.stopLossPct !== null ? `SL:${strategy.exit.stopLossPct}%` : null
 
   return (
     <div
-      className="bg-[#111111] rounded-xl border p-4 transition-all relative overflow-hidden"
-      style={{ borderColor: strategy.enabled ? strategy.color + '35' : '#1e1e1e' }}
+      className="bg-[#111111] rounded-xl border transition-all relative overflow-hidden flex flex-col"
+      style={{ borderColor: strategy.enabled ? strategy.color + '40' : '#1e1e1e' }}
     >
+      {/* Anakin glow */}
       {isAnakin && (
         <div className="absolute inset-0 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse at top left, #ffd70008 0%, transparent 60%)' }} />
+          style={{ background: 'radial-gradient(ellipse at top left, #ffd70010 0%, transparent 55%)' }} />
       )}
 
-      {/* Card header */}
-      <div className="flex items-center justify-between mb-3">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-[#161616]">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: strategy.color }} />
+          <div className="w-2 h-2 rounded-full shrink-0" style={{ background: strategy.color,
+            boxShadow: strategy.enabled ? `0 0 6px ${strategy.color}80` : 'none' }} />
           <span className="font-display font-bold text-[13px] truncate" style={{ color: strategy.enabled ? strategy.color : '#555555' }}>
             {strategy.name}
           </span>
           {strategy.locked && (
-            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded shrink-0"
-              style={{ color: strategy.color, background: strategy.color + '15', border: `1px solid ${strategy.color}25` }}>
-              {isAnakin ? 'PRESET' : 'PRESET'}
+            <span className="text-[9px] font-mono px-1 py-0.5 rounded shrink-0 uppercase tracking-wider"
+              style={{ color: strategy.color + 'aa', background: strategy.color + '10', border: `1px solid ${strategy.color}20` }}>
+              preset
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-[10px] font-mono text-[#444444]">{stats.openTrades} open</span>
+        <div className="flex items-center gap-1 shrink-0">
           {!strategy.locked && (
-            <button
-              onClick={() => onEdit(strategy.id)}
-              className="min-h-[36px] min-w-[44px] text-[11px] font-mono px-2 rounded border border-[#1e1e1e] text-[#555555] hover:text-[#888888] active:bg-[#1a1a1a] hover:border-[#2a2a2a] transition-all cursor-pointer"
-            >
+            <button onClick={() => onEdit(strategy.id)}
+              className="min-h-[32px] px-2 text-[10px] font-mono rounded border border-[#1e1e1e] text-[#555555] hover:text-[#888888] hover:border-[#2a2a2a] transition-all cursor-pointer">
               Edit
             </button>
           )}
-          <button
-            onClick={() => onToggle(strategy.id)}
-            className={`min-h-[36px] min-w-[44px] text-[11px] font-mono px-2.5 rounded border transition-all cursor-pointer ${
-              strategy.enabled ? 'border-[#00ff8840] text-[#00ff88] bg-[#00ff8808]' : 'border-[#1e1e1e] text-[#555555]'
-            }`}
-          >
+          <button onClick={() => onToggle(strategy.id)}
+            className={`min-h-[32px] px-2.5 text-[10px] font-mono rounded border transition-all cursor-pointer font-bold ${
+              strategy.enabled ? 'border-[#00ff8835] text-[#00ff88] bg-[#00ff8808]' : 'border-[#1e1e1e] text-[#444444] hover:text-[#666666]'
+            }`}>
             {strategy.enabled ? 'ON' : 'OFF'}
           </button>
         </div>
       </div>
 
+      {/* Description */}
       {strategy.description && (
-        <p className="text-[10px] font-mono text-[#555555] mb-3">{strategy.description}</p>
+        <p className="px-4 pt-2.5 text-[10px] font-mono text-[#555555] leading-relaxed">{strategy.description}</p>
       )}
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-3 gap-2 mb-2">
-        <StatBox label="Total PnL" value={`${stats.totalPnlSol >= 0 ? '+' : ''}${stats.totalPnlSol.toFixed(3)}`} color={pnlColor} />
-        <StatBox label="Win Rate" value={stats.winRate > 0 ? `${stats.winRate.toFixed(0)}%` : '—'} color={stats.winRate > 0 ? winColor : '#444444'} />
-        <StatBox label="Trades" value={`${stats.totalTrades}`} />
-      </div>
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        <StatBox label="Avg Win" value={stats.wins > 0 ? `+${stats.avgWinPct.toFixed(1)}%` : '—'} color="#00ff88" />
-        <StatBox label="Avg Loss" value={stats.losses > 0 ? `${stats.avgLossPct.toFixed(1)}%` : '—'} color="#ff3355" />
-        <StatBox label="Best" value={stats.best > 0 ? `+${stats.best.toFixed(0)}%` : '—'} color="#00d4ff" />
+      {/* Equity sparkline */}
+      <div className="px-4 pt-3 pb-1 h-12">
+        <Sparkline data={hasData ? stats.equityCurve : []} color={pnlColor} />
       </div>
 
-      {/* Filter + exit tags */}
-      <div className="border-t border-[#1a1a1a] pt-3 mb-3">
-        <div className="flex flex-wrap gap-1.5">
-          {activeProtocols.slice(0, 3).map(p => (
-            <span key={p} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1a1a1a] text-[#888888] border border-[#222]">{p}</span>
-          ))}
-          {activeProtocols.length > 3 && (
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1a1a1a] text-[#444444]">+{activeProtocols.length - 3}</span>
-          )}
-          {strategy.filters.buyPressure.min !== null && (
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1a1a1a] text-[#888888]">BP ≥{strategy.filters.buyPressure.min}%</span>
-          )}
-          {strategy.filters.liquidity.min !== null && (
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1a1a1a] text-[#888888]">
-              Liq ${(strategy.filters.liquidity.min / 1000).toFixed(0)}k+
-            </span>
-          )}
-          {strategy.exit.takeProfitLevels.map((tp, i) => (
-            <span key={tp.id} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1a1a1a] text-[#888888]">
-              TP{i + 1}: {tp.type === 'percent' ? `+${tp.value}%` : `$${(tp.value / 1000).toFixed(0)}K`}
-            </span>
-          ))}
-          {strategy.exit.stopLossPct !== null && (
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1a1a1a] text-[#ff3355]">
-              SL {strategy.exit.stopLossPct}%
-            </span>
-          )}
+      {/* PnL headline */}
+      <div className="px-4 pb-3 flex items-end justify-between">
+        <div>
+          <p className="text-[10px] font-mono text-[#444444] mb-0.5">Total P&L</p>
+          <p className="text-[18px] font-mono font-bold tabular-nums leading-none" style={{ color: hasData ? pnlColor : '#333333' }}>
+            {hasData ? `${stats.totalPnlSol >= 0 ? '+' : ''}${stats.totalPnlSol.toFixed(3)}` : '—'}
+            {hasData && <span className="text-[11px] ml-1 opacity-60">SOL</span>}
+          </p>
         </div>
+        <div className="text-right">
+          <p className="text-[10px] font-mono text-[#444444] mb-0.5">Trades</p>
+          <p className="text-[16px] font-mono font-bold tabular-nums text-[#e6e6e6] leading-none">
+            {stats.totalTrades}
+            {stats.openTrades > 0 && (
+              <span className="text-[11px] ml-1 font-normal" style={{ color: '#00d4ff' }}>
+                {stats.openTrades} open
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+
+      {/* Win rate bar */}
+      <div className="px-4 pb-3">
+        <WinRateBar rate={stats.winRate} wins={stats.wins} losses={stats.losses} />
+      </div>
+
+      {/* Best / Worst row */}
+      <div className="px-4 pb-3 grid grid-cols-2 gap-2">
+        <div className="bg-[#0d0d0d] rounded-lg p-2">
+          <p className="text-[10px] font-mono text-[#444444] mb-0.5">Best trade</p>
+          <p className="text-[12px] font-mono font-bold tabular-nums" style={{ color: stats.best > 0 ? '#00ff88' : '#333333' }}>
+            {stats.best > 0 ? `+${stats.best.toFixed(0)}%` : '—'}
+          </p>
+        </div>
+        <div className="bg-[#0d0d0d] rounded-lg p-2">
+          <p className="text-[10px] font-mono text-[#444444] mb-0.5">Size / trade</p>
+          <p className="text-[12px] font-mono font-bold tabular-nums text-[#e6e6e6]">
+            {strategy.positionSizeSol.toFixed(2)} SOL
+          </p>
+        </div>
+      </div>
+
+      {/* Filter / exit tags */}
+      <div className="px-4 pb-3 flex flex-wrap gap-1">
+        {activeProtocols.slice(0, 2).map(p => (
+          <span key={p} className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#1a1a1a] text-[#666666] border border-[#222]">{p}</span>
+        ))}
+        {tpTags.map((t, i) => (
+          <span key={i} className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#00ff8808] text-[#00ff8888] border border-[#00ff8818]">{t}</span>
+        ))}
+        {slTag && (
+          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#ff335508] text-[#ff335588] border border-[#ff335518]">{slTag}</span>
+        )}
       </div>
 
       {/* Auto-trade toggle */}
-      <button
-        onClick={() => onToggleAutoTrade(strategy.id)}
-        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all cursor-pointer text-[11px] font-mono ${
-          strategy.autoTrade
-            ? 'border-[#ffd70040] bg-[#ffd70008] text-[#ffd700]'
-            : 'border-[#1e1e1e] bg-[#0d0d0d] text-[#444444] hover:text-[#666666]'
-        }`}
-      >
-        <div className="flex items-center gap-2">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-          </svg>
-          <span>Auto-Trade</span>
-          {strategy.autoTrade && <span className="text-[9px] opacity-70">(paper mode)</span>}
-        </div>
-        <div className={`w-8 h-4 rounded-full border transition-all relative ${
-          strategy.autoTrade ? 'bg-[#ffd700] border-[#ffd70060]' : 'bg-[#1a1a1a] border-[#2a2a2a]'
-        }`}>
-          <div className={`absolute top-0.5 w-3 h-3 rounded-full transition-all ${
-            strategy.autoTrade ? 'left-4 bg-[#080808]' : 'left-0.5 bg-[#444444]'
-          }`} />
-        </div>
-      </button>
+      <div className="px-4 pb-4 mt-auto">
+        <button
+          onClick={() => onToggleAutoTrade(strategy.id)}
+          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border transition-all cursor-pointer ${
+            strategy.autoTrade
+              ? 'border-[#ffd70040] bg-[#ffd70008]'
+              : 'border-[#1e1e1e] bg-[#0d0d0d] hover:border-[#2a2a2a]'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={strategy.autoTrade ? '#ffd700' : '#444444'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+            <span className="text-[11px] font-mono font-bold" style={{ color: strategy.autoTrade ? '#ffd700' : '#555555' }}>
+              Auto-Trade
+            </span>
+            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded"
+              style={strategy.autoTrade
+                ? { color: '#ffd700', background: '#ffd70015', border: '1px solid #ffd70025' }
+                : { color: '#333333', border: '1px solid #222' }
+              }>
+              {strategy.autoTrade ? 'PAPER MODE' : 'DISABLED'}
+            </span>
+          </div>
+          {/* Toggle switch */}
+          <div className={`w-9 h-5 rounded-full border relative transition-all ${
+            strategy.autoTrade ? 'bg-[#ffd700] border-[#ffd70060]' : 'bg-[#1a1a1a] border-[#252525]'
+          }`}>
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200 ${
+              strategy.autoTrade ? 'left-[18px] bg-[#080808]' : 'left-0.5 bg-[#444444]'
+            }`} />
+          </div>
+        </button>
+        {strategy.autoTrade && (
+          <p className="text-[9px] font-mono text-[#555555] mt-1.5 text-center">
+            Simulating entries at live prices · no real transactions sent
+          </p>
+        )}
+      </div>
     </div>
   )
 }

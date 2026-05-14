@@ -40,33 +40,51 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(secs / 3600)}h ago`
 }
 
-function BotStatusBar({ botActivity, openCount }: { botActivity: BotActivity; openCount: number }) {
+function BotStatusBar({ botActivity, openCount, totalPnl, totalTrades }: {
+  botActivity: BotActivity; openCount: number; totalPnl: number; totalTrades: number
+}) {
+  const pnlColor = totalPnl >= 0 ? '#00ff88' : '#ff3355'
   return (
-    <div className="flex items-center gap-4 px-4 py-2.5 bg-[#0d0d0d] border-b border-[#1a1a1a] shrink-0 text-[11px] font-mono">
-      <div className="flex items-center gap-1.5">
-        <div className="w-1.5 h-1.5 rounded-full bg-[#00d4ff]" style={{ animation: 'pulse 2s ease-in-out infinite' }} />
-        <span className="text-[#00d4ff] font-bold">BOT RUNNING</span>
-      </div>
-      <div className="text-[#444444]">·</div>
-      <div className="flex items-center gap-1">
-        <span className="text-[#555555]">Session trades</span>
-        <span className="text-[#e6e6e6]">{botActivity.totalTrades}</span>
-      </div>
-      <div className="text-[#444444]">·</div>
-      <div className="flex items-center gap-1">
-        <span className="text-[#555555]">Open</span>
-        <span className="text-[#00d4ff]">{openCount}</span>
-      </div>
-      <div className="text-[#444444]">·</div>
-      <div className="flex items-center gap-1">
-        <span className="text-[#555555]">Last trade</span>
-        <span className="text-[#888888]">{timeAgo(botActivity.lastTradeTime)}</span>
-      </div>
-      <div className="ml-auto flex items-center gap-1 text-[#555555]">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-        </svg>
-        Tick {timeAgo(botActivity.lastTickTime)}
+    <div className="shrink-0 bg-[#0a0a0a] border-b border-[#1a1a1a]">
+      <div className="flex items-center gap-0 divide-x divide-[#1a1a1a] text-[11px] font-mono overflow-x-auto">
+        {/* Bot status */}
+        <div className="flex items-center gap-2 px-4 py-3 shrink-0">
+          <div className="w-1.5 h-1.5 rounded-full bg-[#00d4ff] shrink-0"
+            style={{ animation: 'pulse 2s ease-in-out infinite', boxShadow: '0 0 6px #00d4ff80' }} />
+          <span className="text-[#00d4ff] font-bold tracking-wider">BOT</span>
+          <span className="text-[#444444]">ACTIVE</span>
+        </div>
+        {/* Session trades */}
+        <div className="flex items-center gap-2 px-4 py-3 shrink-0">
+          <span className="text-[#555555]">Session</span>
+          <span className="text-[#e6e6e6] font-bold">{botActivity.totalTrades}</span>
+          <span className="text-[#444444]">trades</span>
+        </div>
+        {/* Open positions */}
+        <div className="flex items-center gap-2 px-4 py-3 shrink-0">
+          <span className="text-[#555555]">Open</span>
+          <span className="font-bold tabular-nums" style={{ color: openCount > 0 ? '#00d4ff' : '#444444' }}>{openCount}</span>
+        </div>
+        {/* Total PnL */}
+        <div className="flex items-center gap-2 px-4 py-3 shrink-0">
+          <span className="text-[#555555]">P&L</span>
+          <span className="font-bold tabular-nums" style={{ color: totalTrades > 0 ? pnlColor : '#444444' }}>
+            {totalTrades > 0 ? `${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(3)} SOL` : '—'}
+          </span>
+        </div>
+        {/* Last trade */}
+        <div className="flex items-center gap-2 px-4 py-3 shrink-0">
+          <span className="text-[#555555]">Last trade</span>
+          <span className="text-[#888888]">{timeAgo(botActivity.lastTradeTime)}</span>
+        </div>
+        {/* Price tick */}
+        <div className="flex items-center gap-1.5 px-4 py-3 ml-auto shrink-0">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#555555" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span className="text-[#555555]">Price tick</span>
+          <span className="text-[#444444]">{timeAgo(botActivity.lastTickTime)}</span>
+        </div>
       </div>
     </div>
   )
@@ -120,16 +138,16 @@ export function BacktestPage({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <BotStatusBar botActivity={botActivity} openCount={openCount} />
+      <BotStatusBar botActivity={botActivity} openCount={openCount} totalPnl={totalPnl} totalTrades={totalTrades} />
 
       <div className="flex-1 overflow-y-auto overscroll-contain">
         {/* Page header */}
-        <div className="px-4 py-4 border-b border-[#1a1a1a] shrink-0 bg-[#080808]">
-          <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="px-4 pt-4 pb-3 border-b border-[#1a1a1a] shrink-0 bg-[#080808]">
+          <div className="flex items-center justify-between gap-3">
             <div>
               <h1 className="font-display font-bold text-[15px] text-[#e6e6e6]">Bot Strategies</h1>
               <p className="text-[11px] text-[#444444] font-mono mt-0.5">
-                {signals.length} signals · {totalTrades} trades · persisted across sessions
+                {signals.length} live signals · {strategies.filter(s => s.enabled).length} active strategies
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -145,20 +163,6 @@ export function BacktestPage({
               >
                 Clear
               </button>
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div className="flex items-center gap-4 text-[12px] font-mono">
-            <div className="flex items-center gap-2">
-              <span className="text-[#444444]">Total P&L</span>
-              <span className="font-bold tabular-nums" style={{ color: totalPnl >= 0 ? '#00ff88' : '#ff3355' }}>
-                {totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(4)} SOL
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[#444444]">Open</span>
-              <span className="text-[#00d4ff] font-bold tabular-nums">{openCount}</span>
             </div>
           </div>
         </div>

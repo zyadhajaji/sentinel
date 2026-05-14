@@ -67,7 +67,12 @@ export function PositionTable({ positions, strategies, filter }: Props) {
                     <span className="text-[#e6e6e6] font-bold">{pos.tokenSymbol}</span>
                     {pos.dexUrl && (
                       <a href={pos.dexUrl} target="_blank" rel="noopener noreferrer"
-                         className="text-[#333333] hover:text-[#666666] transition-colors min-h-[36px] flex items-center">↗</a>
+                         className="text-[#333333] hover:text-[#666666] transition-colors min-h-[36px] flex items-center" aria-label="View on DexScreener">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                          <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                        </svg>
+                      </a>
                     )}
                   </div>
                   {/* Strategy shown inline on mobile */}
