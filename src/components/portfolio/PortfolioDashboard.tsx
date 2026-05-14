@@ -31,10 +31,9 @@ function fmtSol(n: number): string {
   return Math.abs(n) >= 1 ? n.toFixed(3) : n.toFixed(4)
 }
 
-function fmtUSD(n: number, price: number): string {
-  const v = n * price
-  if (Math.abs(v) >= 1000) return `$${(v / 1000).toFixed(1)}K`
-  return `$${v.toFixed(2)}`
+function fmtUSD(usd: number): string {
+  if (Math.abs(usd) >= 1000) return `$${(usd / 1000).toFixed(1)}K`
+  return `$${usd.toFixed(2)}`
 }
 
 const STATUS_CFG: Record<string, { label: string; color: string }> = {
@@ -105,12 +104,12 @@ function PortfolioDonut({
         </p>
         <p className="text-[26px] font-bold tabular-nums leading-none" style={{ color: '#f0f0f0', fontFamily: "'Inter', sans-serif" }}>
           {showUsd
-            ? `$${usdBalance >= 1000 ? (usdBalance / 1000).toFixed(2) + 'K' : usdBalance.toFixed(2)}`
+            ? fmtUSD(usdBalance)
             : `${fmtSol(solBalance)}`
           }
         </p>
         <p className="text-[10px] font-mono text-[#444] mt-0.5">
-          {showUsd ? `${fmtSol(solBalance)} SOL` : `$${usdBalance.toFixed(2)}`}
+          {showUsd ? `${fmtSol(solBalance)} SOL` : fmtUSD(usdBalance)}
         </p>
         {pnlSol !== 0 && (
           <p className="text-[10px] font-mono mt-1.5 font-bold" style={{ color: pnlColor }}>
@@ -451,7 +450,7 @@ function WithdrawModal({ onClose, solBalance, solPrice }: { onClose: () => void;
           <p className="text-[24px] font-bold tabular-nums text-[#e6e6e6]" style={{ fontFamily: "'Inter', sans-serif" }}>
             {fmtSol(solBalance)} <span className="text-[14px] text-[#444]">SOL</span>
           </p>
-          <p className="text-[12px] font-mono text-[#555]">${(solBalance * solPrice).toFixed(2)} USD</p>
+          <p className="text-[12px] font-mono text-[#555]">{fmtUSD(solBalance * solPrice)} USD</p>
         </div>
 
         {/* Guidance */}
