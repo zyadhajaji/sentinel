@@ -166,6 +166,11 @@ input:focus-visible,
   100% { background-position:  200% 0; }
 }
 
+@keyframes pill-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.3; transform: scale(0.7); }
+}
+
 .animate-pulse-green { animation: pulse-green 2.5s ease-in-out infinite; }
 .animate-fade-in     { animation: fade-in 200ms var(--ease-out) forwards; }
 .animate-slide-up    { animation: slide-in-up 200ms var(--ease-out) forwards; }
