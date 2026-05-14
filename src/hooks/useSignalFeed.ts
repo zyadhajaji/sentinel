@@ -34,10 +34,23 @@ function pairToSignal(pair: DexPair, profile?: TokenProfile, solPrice = 150): Si
     : pair.dexId?.includes('jupiter') ? 'jupiter'
     : 'unknown'
 
-  const hasTwitter = !!(profile?.links?.some(l => l.type === 'twitter' || l.url?.includes('twitter') || l.url?.includes('x.com'))
-    || pair.info?.socials?.some(s => s.type === 'twitter'))
-  const hasWebsite = !!(profile?.links?.some(l => l.type === 'website' || (!l.url?.includes('twitter') && !l.url?.includes('t.me')))
-    || (pair.info?.websites?.length ?? 0) > 0)
+  const twitterUrl = (
+    pair.info?.socials?.find(s => s.type === 'twitter' || s.url?.includes('twitter.com') || s.url?.includes('x.com'))?.url
+    ?? profile?.links?.find(l => l.type === 'twitter' || l.url?.includes('twitter.com') || l.url?.includes('x.com'))?.url
+    ?? null
+  )
+  const telegramUrl = (
+    pair.info?.socials?.find(s => s.type === 'telegram' || s.url?.includes('t.me'))?.url
+    ?? profile?.links?.find(l => l.type === 'telegram' || l.url?.includes('t.me'))?.url
+    ?? null
+  )
+  const websiteUrl = (
+    pair.info?.websites?.[0]?.url
+    ?? profile?.links?.find(l => l.type === 'website' && !l.url?.includes('twitter') && !l.url?.includes('t.me') && !l.url?.includes('x.com'))?.url
+    ?? null
+  )
+  const hasTwitter = !!twitterUrl
+  const hasWebsite = !!websiteUrl
 
   const contractAgeMins = pair.pairCreatedAt ? ageMinutes(pair.pairCreatedAt) : 30
   const txns1h = (pair.txns?.h1?.buys ?? 0) + (pair.txns?.h1?.sells ?? 0)
@@ -77,6 +90,9 @@ function pairToSignal(pair: DexPair, profile?: TokenProfile, solPrice = 150): Si
     contract_age_minutes: contractAgeMins,
     has_twitter: hasTwitter,
     has_website: hasWebsite,
+    twitter_url: twitterUrl,
+    telegram_url: telegramUrl,
+    website_url: websiteUrl,
     price_usd: parseFloat(pair.priceUsd ?? '0') || 0,
     price_change_1h: pair.priceChange?.h1 ?? 0,
     timestamp: new Date().toISOString(),
@@ -122,6 +138,9 @@ function pumpFunToSignal(token: PumpFunToken, solPrice = 150): Signal {
     contract_age_minutes: 0,
     has_twitter: false,
     has_website: false,
+    twitter_url: null,
+    telegram_url: null,
+    website_url: null,
     price_usd: 0,
     price_change_1h: 0,
     timestamp: new Date().toISOString(),

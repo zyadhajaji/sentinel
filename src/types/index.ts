@@ -19,6 +19,9 @@ export interface Signal {
   contract_age_minutes: number
   has_twitter: boolean
   has_website: boolean
+  twitter_url: string | null
+  telegram_url: string | null
+  website_url: string | null
   price_usd: number
   price_change_1h: number
   timestamp: string

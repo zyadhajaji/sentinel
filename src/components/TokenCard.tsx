@@ -338,6 +338,49 @@ export function TokenCard({ signal, isNew, onTrade }: Props) {
           </div>
         )}
 
+        {/* Social links */}
+        {(signal.twitter_url || signal.telegram_url || signal.website_url) && (
+          <div className="flex items-center gap-1.5 mb-3">
+            {signal.twitter_url && (
+              <a href={signal.twitter_url} target="_blank" rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-1 rounded border border-[#1e1e1e] text-[#555555] hover:text-[#e6e6e6] hover:border-[#333333] transition-all min-h-[28px] cursor-pointer"
+                aria-label="Twitter / X"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.63zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+                <span>Twitter</span>
+              </a>
+            )}
+            {signal.telegram_url && (
+              <a href={signal.telegram_url} target="_blank" rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-1 rounded border border-[#1e1e1e] text-[#555555] hover:text-[#e6e6e6] hover:border-[#333333] transition-all min-h-[28px] cursor-pointer"
+                aria-label="Telegram"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.5 2.5L2.5 9.5l7 2.5m12-9.5l-7 19-5-7m12-12l-12 9"/>
+                </svg>
+                <span>Telegram</span>
+              </a>
+            )}
+            {signal.website_url && (
+              <a href={signal.website_url} target="_blank" rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-1 rounded border border-[#1e1e1e] text-[#555555] hover:text-[#e6e6e6] hover:border-[#333333] transition-all min-h-[28px] cursor-pointer"
+                aria-label="Website"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+                <span>Website</span>
+              </a>
+            )}
+          </div>
+        )}
+
         {/* Bottom info row */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-[10px] font-mono flex-wrap">
