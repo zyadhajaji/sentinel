@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Signal } from '../types'
 import { ScoreBreakdownPanel } from './ScoreBreakdownPanel'
-import { formatUSD, shortCA } from '../lib/mockData'
+import { shortCA } from '../lib/mockData'
 import { useWatchlist } from '../contexts/WatchlistContext'
 import clsx from 'clsx'
 
@@ -12,6 +12,25 @@ interface Props {
   onDetail?: (signal: Signal) => void
 }
 
+// ── Format helpers ────────────────────────────────────────────────────────────
+function fmt(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`
+  return `$${n.toFixed(0)}`
+}
+
+function fmtSOL(n: number): string {
+  return n >= 1 ? `${n.toFixed(2)}◎` : `${n.toFixed(3)}◎`
+}
+
+function ageLabel(m: number): string {
+  if (m < 1) return '<1m'
+  if (m < 60) return `${m}m`
+  if (m < 1440) return `${Math.floor(m / 60)}h`
+  return `${Math.floor(m / 1440)}d`
+}
+
+// ── Config ────────────────────────────────────────────────────────────────────
 const GRADE_CONFIG = {
   SAFE:  { color: '#00ff88', label: 'SAFE' },
   WATCH: { color: '#ffcc00', label: 'WATCH' },
@@ -22,11 +41,58 @@ const SOURCE_LABELS: Record<string, string> = {
   pumpfun: 'pump', raydium: 'ray', moonshot: 'moon', jupiter: 'jup', unknown: '?',
 }
 
+// ── Compute banner/effects ────────────────────────────────────────────────────
+interface HotState {
+  banners: { text: string; color: string; bg: string }[]
+  borderColor: string
+  animClass: string
+}
+
+function computeHot(signal: Signal): HotState {
+  const banners: HotState['banners'] = []
+  let borderColor = '#1c1c1c'
+  let animClass = ''
+
+  const isSurge   = signal.volume_1h >= 100_000
+  const isHighVol = signal.volume_1h >= 50_000 && signal.volume_1h < 100_000
+  const isMooning = signal.price_change_1h >= 200
+  const isATH     = signal.price_change_1h >= 100 && signal.price_change_1h < 200
+  const isLaunch  = signal.contract_age_minutes <= 3
+
+  if (isLaunch) {
+    banners.push({ text: '● NEW LAUNCH', color: '#00ff88', bg: 'rgba(0,255,136,0.05)' })
+    borderColor = '#00ff8840'
+    animClass = 'animate-launch'
+  }
+  if (isMooning) {
+    banners.push({ text: `🚀 MOONING · +${signal.price_change_1h.toFixed(0)}%`, color: '#ffd700', bg: 'rgba(255,215,0,0.04)' })
+    if (!isLaunch) { animClass = 'animate-moon' }
+  } else if (isATH) {
+    banners.push({ text: `📈 ATH · +${signal.price_change_1h.toFixed(0)}%`, color: '#ffd700', bg: 'rgba(255,215,0,0.04)' })
+  }
+  if (isSurge) {
+    banners.push({ text: `🔥 SURGE · ${fmt(signal.volume_1h)} VOLUME`, color: '#ffd700', bg: 'rgba(255,215,0,0.04)' })
+    borderColor = '#ffd70050'
+    animClass = 'animate-surge'
+  } else if (isHighVol) {
+    banners.push({ text: `⚡ HIGH VOLUME · ${fmt(signal.volume_1h)}`, color: '#ff8c00', bg: 'rgba(255,140,0,0.04)' })
+    if (!isLaunch) { borderColor = '#ff8c0040' }
+  }
+
+  return { banners, borderColor, animClass }
+}
+
+// ── Rug warning ───────────────────────────────────────────────────────────────
+function rugLabel(score: number | null): { text: string; color: string } | null {
+  if (score === null) return null
+  if (score >= 700) return null
+  if (score >= 500) return { text: '⚠ WARN', color: '#ffcc00' }
+  return { text: '☠ RUG', color: '#ff3355' }
+}
+
 // ── Mini sparkline ────────────────────────────────────────────────────────────
-// Generates a deterministic pseudo-chart from the CA string, biased by price_change_1h
 function MiniSparkline({ ca, priceChange }: { ca: string; priceChange: number }) {
-  const W = 80, H = 36, pts = 20
-  // Seed from CA chars
+  const W = 90, H = 32, pts = 20
   let seed = 0
   for (let i = 0; i < ca.length; i++) seed = (seed * 31 + ca.charCodeAt(i)) & 0xffffff
 
@@ -45,14 +111,9 @@ function MiniSparkline({ ca, priceChange }: { ca: string; priceChange: number })
 
   const minV = Math.min(...raw), maxV = Math.max(...raw)
   const norm = raw.map(r => (r - minV) / (maxV - minV + 0.001))
-  const coords = norm.map((n, i) => ({
-    x: (i / (pts - 1)) * W,
-    y: H - 4 - n * (H - 8),
-  }))
-
+  const coords = norm.map((n, i) => ({ x: (i / (pts - 1)) * W, y: H - 4 - n * (H - 8) }))
   const polyline = coords.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
   const area = `${coords[0].x},${H} ` + coords.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') + ` ${coords[coords.length - 1].x},${H}`
-
   const isUp = priceChange >= 0
   const color = isUp ? '#00ff88' : '#ff3355'
 
@@ -72,64 +133,28 @@ function TokenAvatar({ imageUrl, symbol, grade }: { imageUrl: string | null; sym
   const initials = symbol.slice(0, 2).toUpperCase()
 
   return (
-    <div className="relative shrink-0 w-14 h-14">
+    <div className="relative shrink-0 w-[52px] h-[52px]">
       {imageUrl && !imgErr ? (
         <img
           src={imageUrl}
           alt={symbol}
           onError={() => setImgErr(true)}
-          className="w-14 h-14 rounded-xl object-cover bg-[#1a1a1a]"
+          className="w-[52px] h-[52px] rounded-xl object-cover bg-[#1a1a1a]"
         />
       ) : (
         <div
-          className="w-14 h-14 rounded-xl flex items-center justify-center text-[16px] font-bold font-display"
+          className="w-[52px] h-[52px] rounded-xl flex items-center justify-center text-[15px] font-bold font-display"
           style={{ background: `${cfg.color}15`, color: cfg.color, border: `1px solid ${cfg.color}28` }}
         >
           {initials}
         </div>
       )}
-      {/* Grade dot badge */}
       <span
         className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#111111]"
         style={{ background: cfg.color }}
       />
     </div>
   )
-}
-
-// ── Status pills ──────────────────────────────────────────────────────────────
-function computePills(signal: Signal) {
-  const pills: { key: string; label: string; color: string; pulse: boolean }[] = []
-  if (signal.contract_age_minutes <= 3)
-    pills.push({ key: 'age', label: 'JUST LAUNCHED', color: '#00ff88', pulse: true })
-  else if (signal.contract_age_minutes <= 15)
-    pills.push({ key: 'age', label: 'FRESH', color: '#00d4ff', pulse: false })
-  if (signal.price_change_1h >= 200)
-    pills.push({ key: 'px', label: 'MOONING 🚀', color: '#ffd700', pulse: true })
-  else if (signal.price_change_1h >= 100)
-    pills.push({ key: 'px', label: 'ATH', color: '#ffd700', pulse: true })
-  else if (signal.price_change_1h >= 50)
-    pills.push({ key: 'px', label: 'PUMPING', color: '#ff8c00', pulse: false })
-  if (signal.volume_1h >= 50_000)
-    pills.push({ key: 'vol', label: 'HIGH VOL', color: '#00d4ff', pulse: true })
-  if (signal.buy_pressure >= 80)
-    pills.push({ key: 'bp', label: 'FOMO', color: '#ff3355', pulse: true })
-  return pills
-}
-
-// ── Rug warning ───────────────────────────────────────────────────────────────
-function rugLabel(score: number | null): { text: string; color: string } | null {
-  if (score === null) return null
-  if (score >= 700) return null
-  if (score >= 500) return { text: '⚠ WARN', color: '#ffcc00' }
-  return { text: '☠ RUG', color: '#ff3355' }
-}
-
-// ── Age helper ────────────────────────────────────────────────────────────────
-function ageLabel(m: number): string {
-  if (m < 1) return '<1m'
-  if (m < 60) return `${m}m`
-  return `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}`
 }
 
 // ── Star icon ─────────────────────────────────────────────────────────────────
@@ -142,6 +167,22 @@ function StarIcon({ filled }: { filled: boolean }) {
   )
 }
 
+// ── Social icon button ────────────────────────────────────────────────────────
+function SocialBtn({ href, label, children }: { href: string; label: string; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={e => e.stopPropagation()}
+      className="w-6 h-6 flex items-center justify-center rounded-md border border-[#1e1e1e] text-[#555555] hover:text-[#e6e6e6] hover:border-[#333333] transition-all cursor-pointer"
+      aria-label={label}
+    >
+      {children}
+    </a>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
   const [showBreakdown, setShowBreakdown] = useState(false)
@@ -149,12 +190,15 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
   const { watchlist, toggle } = useWatchlist()
   const isWatched = watchlist.has(signal.ca)
 
-  const pills = computePills(signal)
+  const hot = computeHot(signal)
   const rug = rugLabel(signal.rug_score)
   const grade = GRADE_CONFIG[signal.score_grade]
   const isUp = signal.price_change_1h >= 0
   const pxColor = isUp ? '#00ff88' : '#ff3355'
   const pxSign  = isUp ? '+' : ''
+
+  // Buy pressure color
+  const bpColor = signal.buy_pressure >= 65 ? '#ff8c00' : signal.buy_pressure >= 45 ? '#ffcc00' : '#888888'
 
   function copyCA(e: React.MouseEvent) {
     e.stopPropagation()
@@ -163,213 +207,222 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
     setTimeout(() => setCopied(false), 1400)
   }
 
-  const hasSocials = !!(signal.twitter_url || signal.telegram_url || signal.website_url)
-
   return (
     <div
       className={clsx(
-        'bg-[#0f0f0f] rounded-2xl overflow-hidden transition-all duration-200 active:scale-[0.99]',
+        'bg-[#0d0d0d] rounded-2xl overflow-hidden transition-all duration-200 active:scale-[0.99]',
         isNew
           ? 'border border-[#00ff8860] shadow-[0_0_24px_rgba(0,255,136,0.08)] animate-slide-up'
-          : 'border border-[#1c1c1c] hover:border-[#2a2a2a]',
+          : `border hover:border-[#2a2a2a]`,
+        hot.animClass,
         onDetail ? 'cursor-pointer' : ''
       )}
+      style={!isNew ? { borderColor: hot.borderColor } : undefined}
       onClick={() => onDetail?.(signal)}
     >
-      {/* Launch/ATH banner */}
-      {signal.contract_age_minutes <= 3 && (
-        <div className="flex items-center gap-2 px-4 py-1.5 text-[10px] font-mono font-bold"
-          style={{ background: 'rgba(0,255,136,0.05)', borderBottom: '1px solid rgba(0,255,136,0.1)', color: '#00ff88' }}>
-          <span className="w-1.5 h-1.5 rounded-full bg-[#00ff88]" style={{ animation: 'pill-dot-pulse 1.2s ease-in-out infinite' }} />
-          NEW TOKEN LAUNCHED
+      {/* ── Banners ────────────────────────────────────────────────────────── */}
+      {hot.banners.map((banner, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-2 px-4 py-1 text-[10px] font-mono font-bold tracking-wider"
+          style={{ background: banner.bg, borderBottom: `1px solid ${banner.color}20`, color: banner.color }}
+        >
+          {banner.text}
         </div>
-      )}
-      {signal.price_change_1h >= 100 && signal.contract_age_minutes > 3 && (
-        <div className="flex items-center gap-2 px-4 py-1.5 text-[10px] font-mono font-bold"
-          style={{ background: 'rgba(255,215,0,0.04)', borderBottom: '1px solid rgba(255,215,0,0.1)', color: '#ffd700' }}>
-          <span className="w-1.5 h-1.5 rounded-full bg-[#ffd700]" style={{ animation: 'pill-dot-pulse 1.4s ease-in-out infinite' }} />
-          {signal.price_change_1h >= 200 ? 'MOONING' : 'ATH'} · +{signal.price_change_1h.toFixed(0)}%
-        </div>
-      )}
+      ))}
 
-      <div className="p-3.5">
-        {/* Main row: avatar | info | sparkline | mcap */}
-        <div className="flex items-center gap-3">
+      <div className="p-3">
+        {/* ── Main row ───────────────────────────────────────────────────── */}
+        <div className="flex items-start gap-2.5">
           <TokenAvatar imageUrl={signal.image_url} symbol={signal.token_symbol} grade={signal.score_grade} />
 
-          {/* Token info */}
+          {/* Center info */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 mb-0.5">
-              <span className="font-bold text-[15px] text-[#e8e8e8] tracking-wide truncate"
-                style={{ fontFamily: "'Inter', sans-serif" }}>
+            {/* Row 1: symbol · grade · rug */}
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="font-bold text-[14px] text-[#e8e8e8] tracking-wide truncate" style={{ fontFamily: "'Inter', sans-serif" }}>
                 {signal.token_symbol}
               </span>
-              {/* Grade badge */}
-              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full shrink-0 font-bold"
-                style={{ color: grade.color, background: `${grade.color}15`, border: `1px solid ${grade.color}30` }}>
+              <span
+                className="text-[9px] font-mono px-1.5 py-0.5 rounded-full shrink-0 font-bold"
+                style={{ color: grade.color, background: `${grade.color}15`, border: `1px solid ${grade.color}30` }}
+              >
                 {grade.label}
               </span>
               {rug && (
-                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full shrink-0 font-bold"
-                  style={{ color: rug.color, background: `${rug.color}12` }}>
+                <span
+                  className="text-[9px] font-mono px-1.5 py-0.5 rounded-full shrink-0 font-bold"
+                  style={{ color: rug.color, background: `${rug.color}12` }}
+                >
                   {rug.text}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#444444] flex-wrap">
-              <span>{SOURCE_LABELS[signal.source] ?? signal.source}</span>
-              <span className="text-[#252525]">·</span>
-              <span>{ageLabel(signal.contract_age_minutes)}</span>
+
+            {/* Row 2: age · CA · source */}
+            <div className="flex items-center gap-1 text-[10px] font-mono text-[#444444] flex-wrap mb-1.5">
+              <span className="text-[#555555]">{ageLabel(signal.contract_age_minutes)}</span>
               <span className="text-[#252525]">·</span>
               <button
                 onClick={copyCA}
-                className="transition-colors min-h-[20px] cursor-pointer"
+                className="transition-colors cursor-pointer hover:text-[#888888]"
                 style={{ color: copied ? '#00ff88' : '#333333' }}
                 title="Copy CA"
               >
                 {copied ? 'copied!' : shortCA(signal.ca)}
               </button>
+              <span className="text-[#252525]">·</span>
+              <span
+                className="px-1.5 py-0.5 rounded text-[9px] font-bold"
+                style={{ color: '#888', background: '#1a1a1a' }}
+              >
+                {SOURCE_LABELS[signal.source] ?? signal.source}
+              </span>
+            </div>
+
+            {/* Row 3: socials · holders */}
+            <div className="flex items-center gap-1">
+              {signal.twitter_url && (
+                <SocialBtn href={signal.twitter_url} label="Twitter">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.63zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                  </svg>
+                </SocialBtn>
+              )}
+              {signal.telegram_url && (
+                <SocialBtn href={signal.telegram_url} label="Telegram">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/>
+                  </svg>
+                </SocialBtn>
+              )}
+              {signal.website_url && (
+                <SocialBtn href={signal.website_url} label="Website">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                  </svg>
+                </SocialBtn>
+              )}
+              {signal.dex_url && (
+                <SocialBtn href={signal.dex_url} label="DEX">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                </SocialBtn>
+              )}
+              {signal.holders !== null && (
+                <span className="ml-1 text-[10px] font-mono text-[#444444]">
+                  👥 {signal.holders >= 1000 ? `${(signal.holders / 1000).toFixed(1)}K` : signal.holders}
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Sparkline + MCap */}
-          <div className="flex flex-col items-end gap-1 shrink-0">
+          {/* Right: sparkline + stats */}
+          <div className="shrink-0 flex flex-col items-end gap-1.5">
             <MiniSparkline ca={signal.ca} priceChange={signal.price_change_1h} />
-            <span className="text-[14px] font-bold tabular-nums" style={{ color: pxColor, fontFamily: "'Inter', sans-serif" }}>
-              {formatUSD(signal.mcap_usd)}
+            {/* Volume */}
+            <div className="text-right">
+              <span className="text-[9px] font-mono text-[#444444]">V </span>
+              <span className="text-[11px] font-mono tabular-nums font-bold" style={{ color: '#ffcc00' }}>
+                {fmt(signal.volume_1h)}
+              </span>
+            </div>
+            {/* MCap */}
+            <div className="text-right">
+              <span className="text-[9px] font-mono text-[#444444]">MC </span>
+              <span className="text-[11px] font-mono tabular-nums font-bold" style={{ color: pxColor }}>
+                {fmt(signal.mcap_usd)}
+              </span>
+            </div>
+            {/* Fees */}
+            <div className="text-right">
+              <span className="text-[9px] font-mono text-[#444444]">F </span>
+              <span className="text-[10px] font-mono tabular-nums text-[#555555]">
+                {fmtSOL(signal.fees_est_sol)}
+              </span>
+            </div>
+            {/* Liquidity */}
+            <div className="text-right">
+              <span className="text-[9px] font-mono text-[#444444]">LIQ </span>
+              <span className="text-[10px] font-mono tabular-nums text-[#555555]">
+                {fmt(signal.liquidity_usd)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Stats row: BP bar + stat chips ──────────────────────────────── */}
+        <div className="mt-2.5 pt-2.5 border-t border-[#181818]">
+          {/* Segmented BP bar */}
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[9px] font-mono text-[#333333] shrink-0">BP</span>
+            <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-[#1a1a1a] flex">
+              <div
+                className="h-full transition-all duration-500"
+                style={{ width: `${signal.buy_pressure}%`, background: '#00ff88', opacity: 0.7 }}
+              />
+              <div
+                className="h-full"
+                style={{ width: `${100 - signal.buy_pressure}%`, background: '#ff3355', opacity: 0.4 }}
+              />
+            </div>
+          </div>
+          {/* Stat chips */}
+          <div className="flex items-center gap-1.5">
+            {/* Buy pressure chip */}
+            <span
+              className="text-[9px] font-mono px-2 py-0.5 rounded-full font-bold"
+              style={{ color: bpColor, background: `${bpColor}15`, border: `1px solid ${bpColor}30` }}
+            >
+              {signal.buy_pressure}% BP
             </span>
-            <span className="text-[11px] font-mono tabular-nums" style={{ color: pxColor }}>
+            {/* Price change chip */}
+            <span
+              className="text-[9px] font-mono px-2 py-0.5 rounded-full font-bold"
+              style={{ color: pxColor, background: `${pxColor}15`, border: `1px solid ${pxColor}30` }}
+            >
               {pxSign}{signal.price_change_1h.toFixed(1)}%
             </span>
-          </div>
-        </div>
-
-        {/* Pills row */}
-        {pills.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2.5">
-            {pills.map(p => (
-              <span key={p.key}
-                className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full"
-                style={{ color: p.color, background: `${p.color}12`, border: `1px solid ${p.color}25` }}>
-                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{
-                  background: p.color,
-                  animation: p.pulse ? 'pill-dot-pulse 1.8s ease-in-out infinite' : undefined,
-                }} />
-                {p.label}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Stats strip */}
-        <div className="flex items-center gap-3 mt-2.5 text-[11px] font-mono">
-          <div className="flex items-center gap-1">
-            <span className="text-[#333333]">LIQ</span>
-            <span className="text-[#888888] tabular-nums">{formatUSD(signal.liquidity_usd)}</span>
-          </div>
-          <span className="text-[#1e1e1e]">|</span>
-          <div className="flex items-center gap-1">
-            <span className="text-[#333333]">VOL</span>
-            <span className="text-[#888888] tabular-nums">{formatUSD(signal.volume_1h)}</span>
-          </div>
-          <span className="text-[#1e1e1e]">|</span>
-          {/* Buy pressure bar */}
-          <div className="flex items-center gap-1.5 flex-1">
-            <span className="text-[#333333] shrink-0">BP</span>
-            <div className="flex-1 h-1 bg-[#1a1a1a] rounded-full overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${signal.buy_pressure}%`,
-                  background: signal.buy_pressure >= 65 ? '#00ff88' : signal.buy_pressure >= 45 ? '#ffcc00' : '#ff3355',
-                  opacity: 0.7,
-                }} />
-            </div>
-            <span className="tabular-nums shrink-0"
-              style={{ color: signal.buy_pressure >= 65 ? '#00ff88' : signal.buy_pressure >= 45 ? '#ffcc00' : '#ff3355' }}>
-              {signal.buy_pressure}%
+            {/* Grade chip */}
+            <span
+              className="text-[9px] font-mono px-2 py-0.5 rounded-full font-bold"
+              style={{ color: grade.color, background: `${grade.color}15`, border: `1px solid ${grade.color}30` }}
+            >
+              {grade.label}
             </span>
           </div>
         </div>
 
-        {/* Action row */}
-        <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-[#181818]">
-          {/* Social icons */}
-          <div className="flex items-center gap-1">
-            {signal.twitter_url && (
-              <a href={signal.twitter_url} target="_blank" rel="noopener noreferrer"
-                onClick={e => e.stopPropagation()}
-                className="w-7 h-7 flex items-center justify-center rounded-lg border border-[#1e1e1e] text-[#555555] hover:text-[#e6e6e6] hover:border-[#333333] transition-all cursor-pointer"
-                aria-label="Twitter">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.63zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                </svg>
-              </a>
-            )}
-            {signal.telegram_url && (
-              <a href={signal.telegram_url} target="_blank" rel="noopener noreferrer"
-                onClick={e => e.stopPropagation()}
-                className="w-7 h-7 flex items-center justify-center rounded-lg border border-[#1e1e1e] text-[#555555] hover:text-[#e6e6e6] hover:border-[#333333] transition-all cursor-pointer"
-                aria-label="Telegram">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.941z"/>
-                </svg>
-              </a>
-            )}
-            {signal.website_url && (
-              <a href={signal.website_url} target="_blank" rel="noopener noreferrer"
-                onClick={e => e.stopPropagation()}
-                className="w-7 h-7 flex items-center justify-center rounded-lg border border-[#1e1e1e] text-[#555555] hover:text-[#e6e6e6] hover:border-[#333333] transition-all cursor-pointer"
-                aria-label="Website">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
-                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                </svg>
-              </a>
-            )}
-            {!hasSocials && (
-              <span className="text-[10px] font-mono text-[#2a2a2a]">no socials</span>
-            )}
-            {signal.dex_url && (
-              <a href={signal.dex_url} target="_blank" rel="noopener noreferrer"
-                onClick={e => e.stopPropagation()}
-                className="w-7 h-7 flex items-center justify-center rounded-lg border border-[#1e1e1e] text-[#333333] hover:text-[#888888] hover:border-[#333333] transition-all cursor-pointer ml-0.5"
-                aria-label="DexScreener">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                  <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-                </svg>
-              </a>
-            )}
-          </div>
-
-          {/* Right actions */}
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowBreakdown(v => !v) }}
-              className="text-[10px] font-mono text-[#333333] hover:text-[#666666] transition-colors min-h-[28px] px-2 flex items-center gap-1 cursor-pointer rounded-lg"
-            >
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                style={{ transform: showBreakdown ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-              {signal.scanner_score}
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); toggle(signal.ca) }}
-              className="w-8 h-8 flex items-center justify-center rounded-xl border transition-all cursor-pointer"
-              style={isWatched ? { borderColor: '#ffcc0035', background: '#ffcc0010' } : { borderColor: '#1e1e1e' }}
-              aria-label={isWatched ? 'Unwatch' : 'Watch'}
-            >
-              <StarIcon filled={isWatched} />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onTrade(signal) }}
-              className="h-8 px-3 text-[11px] font-mono font-bold rounded-xl border transition-all cursor-pointer"
-              style={{ borderColor: '#00d4ff30', color: '#00d4ff', background: '#00d4ff08' }}
-            >
-              BUY
-            </button>
-          </div>
+        {/* ── Action row ──────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-end gap-1.5 mt-2.5 pt-2.5 border-t border-[#181818]">
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowBreakdown(v => !v) }}
+            className="text-[10px] font-mono text-[#333333] hover:text-[#666666] transition-colors min-h-[28px] px-2 flex items-center gap-1 cursor-pointer rounded-lg"
+          >
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+              style={{ transform: showBreakdown ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+            {signal.scanner_score}
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); toggle(signal.ca) }}
+            className="w-8 h-8 flex items-center justify-center rounded-xl border transition-all cursor-pointer"
+            style={isWatched ? { borderColor: '#ffcc0035', background: '#ffcc0010' } : { borderColor: '#1e1e1e' }}
+            aria-label={isWatched ? 'Unwatch' : 'Watch'}
+          >
+            <StarIcon filled={isWatched} />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onTrade(signal) }}
+            className="h-8 px-4 text-[11px] font-mono font-bold rounded-xl border transition-all cursor-pointer"
+            style={{ borderColor: '#00d4ff30', color: '#00d4ff', background: '#00d4ff08' }}
+          >
+            BUY
+          </button>
         </div>
 
         {showBreakdown && (

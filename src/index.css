@@ -216,3 +216,20 @@ input:focus-visible,
   align-items: center;
   justify-content: center;
 }
+
+/* ── Hot token animations ───────────────────────────────────────────────────── */
+@keyframes surge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,215,0,0), inset 0 0 0 0 rgba(255,140,0,0); }
+  50% { box-shadow: 0 0 24px rgba(255,140,0,0.12), inset 0 0 12px rgba(255,215,0,0.03); }
+}
+@keyframes moon-glow {
+  0%, 100% { box-shadow: 0 0 12px rgba(147,51,234,0.05); }
+  50% { box-shadow: 0 0 40px rgba(147,51,234,0.18), 0 0 80px rgba(147,51,234,0.06); }
+}
+@keyframes launch-border {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,255,136,0); }
+  50% { box-shadow: 0 0 16px rgba(0,255,136,0.12), 0 0 0 1px rgba(0,255,136,0.25); }
+}
+.animate-surge  { animation: surge-pulse 2.5s ease-in-out infinite; }
+.animate-moon   { animation: moon-glow 3s ease-in-out infinite; }
+.animate-launch { animation: launch-border 1.5s ease-in-out infinite; }
