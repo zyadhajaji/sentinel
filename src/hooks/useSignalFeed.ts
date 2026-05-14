@@ -8,9 +8,14 @@ import { calculateScore } from '../lib/scoreEngine'
 import { detectNarratives } from '../lib/narrativeEngine'
 import { triggerAlert, DEFAULT_ALERT_SETTINGS } from '../lib/alertEngine'
 import type { AlertSettings } from '../lib/alertEngine'
+import { fetchRugReport } from '../lib/rugcheck'
+import { useSolPrice } from './useSolPrice'
 
 const MAX_SIGNALS = 50
 const PROFILE_POLL_MS = 20_000
+const REFRESH_MS = 90_000      // re-fetch top signals from DexScreener
+const REFRESH_BATCH = 15       // how many signals to refresh per cycle
+const REFRESH_DELAY_MS = 400   // gap between DexScreener calls to avoid rate limiting
 const SEEN_TTL_MS = 10 * 60 * 1000
 
 function genId() {
@@ -21,7 +26,7 @@ function ageMinutes(createdAt: number): number {
   return Math.floor((Date.now() - createdAt) / 60_000)
 }
 
-function pairToSignal(pair: DexPair, profile?: TokenProfile): Signal {
+function pairToSignal(pair: DexPair, profile?: TokenProfile, solPrice = 150): Signal {
   const source: SignalSource = pair.dexId?.includes('pump') ? 'pumpfun'
     : pair.dexId?.includes('raydium') ? 'raydium'
     : pair.dexId?.includes('moonshot') ? 'moonshot'
@@ -50,7 +55,7 @@ function pairToSignal(pair: DexPair, profile?: TokenProfile): Signal {
   const totalTxns = txnsH1.buys + txnsH1.sells
   const buy_pressure = totalTxns > 0 ? Math.round((txnsH1.buys / totalTxns) * 100) : 50
   const volume_1h = pair.volume?.h1 ?? 0
-  const fees_est_sol = (volume_1h * 0.01) / 150
+  const fees_est_sol = (volume_1h * 0.01) / solPrice
   const narrative_tags = detectNarratives(pair.baseToken.name, pair.baseToken.symbol)
 
   return {
@@ -80,18 +85,18 @@ function pairToSignal(pair: DexPair, profile?: TokenProfile): Signal {
     buy_pressure,
     volume_1h,
     fees_est_sol,
+    rug_score: null,
+    rug_risks: [],
   }
 }
 
-function pumpFunToSignal(token: PumpFunToken): Signal {
-  // Before DexScreener indexes the token — estimate from bonding curve
-  const solPrice = 150 // rough estimate; replace with live feed later
+function pumpFunToSignal(token: PumpFunToken, solPrice = 150): Signal {
   const mcapSolUsd = (token.marketCapSol ?? 0) * solPrice
   const liquidityUsd = (token.vSolInBondingCurve ?? 0) * solPrice * 2
 
   const { score, grade, breakdown } = calculateScore({
     liquidity_usd: liquidityUsd,
-    txns_1h: 5, // very new, assume low
+    txns_1h: 5,
     source: 'pumpfun',
     contract_age_minutes: 0,
     has_twitter: false,
@@ -125,6 +130,8 @@ function pumpFunToSignal(token: PumpFunToken): Signal {
     buy_pressure: 50,
     volume_1h: 0,
     fees_est_sol: 0,
+    rug_score: null,
+    rug_risks: [],
   }
 }
 
@@ -133,17 +140,24 @@ export function useSignalFeed() {
   const [newSignalId, setNewSignalId] = useState<string | null>(null)
   const [connected, setConnected] = useState(false)
   const [alertSettings, setAlertSettings] = useState<AlertSettings>(DEFAULT_ALERT_SETTINGS)
+
+  const solPrice = useSolPrice()
+  const solPriceRef = useRef(solPrice)
+  solPriceRef.current = solPrice
+
   const seenCAs = useRef<Map<string, number>>(new Map())
   const alertSettingsRef = useRef(alertSettings)
   alertSettingsRef.current = alertSettings
+  const signalsRef = useRef<Signal[]>([])
+
+  // Keep signalsRef in sync for use inside intervals
+  useEffect(() => { signalsRef.current = signals }, [signals])
 
   const addSignal = useCallback((signal: Signal) => {
     const now = Date.now()
-    // Deduplicate
     const last = seenCAs.current.get(signal.ca)
     if (last && now - last < SEEN_TTL_MS) return
     seenCAs.current.set(signal.ca, now)
-    // Prune old entries from seen map
     for (const [ca, ts] of seenCAs.current) {
       if (now - ts > SEEN_TTL_MS) seenCAs.current.delete(ca)
     }
@@ -158,23 +172,29 @@ export function useSignalFeed() {
   useEffect(() => {
     const pf = new PumpFunWS((token: PumpFunToken) => {
       setConnected(true)
-      const signal = pumpFunToSignal(token)
+      const signal = pumpFunToSignal(token, solPriceRef.current)
       addSignal(signal)
 
-      // Enrich with DexScreener after 45s (time to index)
+      // After 45s: enrich with DexScreener + RugCheck
       setTimeout(async () => {
         const pair = await fetchTokenPairs(token.mint)
         if (!pair) return
-        const enriched = pairToSignal(pair)
-        // Replace the original by CA if still in list
-        setSignals(prev => prev.map(s => s.ca === token.mint ? { ...enriched, id: s.id } : s))
+        const enriched = pairToSignal(pair, undefined, solPriceRef.current)
+
+        // Fetch rug report in parallel
+        const rug = await fetchRugReport(token.mint)
+        const withRug: Signal = rug
+          ? { ...enriched, rug_score: rug.score, rug_risks: rug.risks, top_holder_pct: rug.topHolderPct }
+          : enriched
+
+        setSignals(prev => prev.map(s => s.ca === token.mint ? { ...withRug, id: s.id } : s))
       }, 45_000)
     })
 
     return () => pf.destroy()
   }, [addSignal])
 
-  // DexScreener token profiles — polls every 20s for new tokens not from pump.fun
+  // DexScreener token profiles — polls every 20s
   useEffect(() => {
     let active = true
 
@@ -185,18 +205,42 @@ export function useSignalFeed() {
       for (const profile of profiles.slice(0, 10)) {
         const pair = await fetchTokenPairs(profile.tokenAddress)
         if (!active || !pair) continue
-        const signal = pairToSignal(pair, profile)
+        const signal = pairToSignal(pair, profile, solPriceRef.current)
         addSignal(signal)
       }
     }
 
     pollProfiles()
     const timer = setInterval(pollProfiles, PROFILE_POLL_MS)
-    return () => {
-      active = false
-      clearInterval(timer)
-    }
+    return () => { active = false; clearInterval(timer) }
   }, [addSignal])
+
+  // Signal refresh — keep prices/mcap live on existing cards
+  useEffect(() => {
+    let active = true
+
+    async function refreshSignals() {
+      const current = signalsRef.current.slice(0, REFRESH_BATCH)
+      for (const s of current) {
+        if (!active) break
+        try {
+          const pair = await fetchTokenPairs(s.ca)
+          if (!pair) continue
+          const enriched = pairToSignal(pair, undefined, solPriceRef.current)
+          // Preserve rug data and original id from existing signal
+          setSignals(prev => prev.map(p =>
+            p.ca === s.ca
+              ? { ...enriched, id: p.id, rug_score: p.rug_score, rug_risks: p.rug_risks, top_holder_pct: p.top_holder_pct }
+              : p
+          ))
+          await new Promise(r => setTimeout(r, REFRESH_DELAY_MS))
+        } catch {}
+      }
+    }
+
+    const timer = setInterval(refreshSignals, REFRESH_MS)
+    return () => { active = false; clearInterval(timer) }
+  }, [])
 
   return { signals, newSignalId, connected, alertSettings, setAlertSettings }
 }

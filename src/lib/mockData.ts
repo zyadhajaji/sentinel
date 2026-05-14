@@ -76,6 +76,8 @@ export function generateSignal(): Signal {
     buy_pressure: randomInt(30, 80),
     volume_1h: randomBetween(0, 50000),
     fees_est_sol: randomBetween(0, 3),
+    rug_score: null,
+    rug_risks: [],
   }
 }
 

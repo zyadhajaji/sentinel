@@ -28,6 +28,8 @@ export interface Signal {
   buy_pressure: number
   volume_1h: number
   fees_est_sol: number
+  rug_score: number | null  // 0-1000 from RugCheck, higher = safer
+  rug_risks: string[]       // danger/warn risk names
 }
 
 export interface ScoreBreakdown {

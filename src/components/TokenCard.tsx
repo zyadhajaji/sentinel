@@ -31,12 +31,27 @@ const NARRATIVE_COLORS: Record<string, string> = {
   SOLANA: '#9945ff',
 }
 
+function rugLabel(score: number | null): { text: string; color: string } | null {
+  if (score === null) return null
+  if (score >= 700) return null                                    // clean — show nothing
+  if (score >= 500) return { text: '⚠ WARN', color: '#ffcc00' }  // moderate risk
+  return { text: '☠ RUG', color: '#ff3355' }                     // high risk
+}
+
 export function TokenCard({ signal, isNew, onTrade }: Props) {
   const [showBreakdown, setShowBreakdown] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const priceChangeColor = signal.price_change_1h >= 0 ? '#00ff88' : '#ff3355'
   const priceChangeSign = signal.price_change_1h >= 0 ? '+' : ''
   const buyPressColor = signal.buy_pressure >= 60 ? '#00ff88' : signal.buy_pressure >= 40 ? '#ffcc00' : '#ff3355'
+  const rug = rugLabel(signal.rug_score)
+
+  function copyCA() {
+    navigator.clipboard.writeText(signal.ca).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
 
   return (
     <div
@@ -52,7 +67,7 @@ export function TokenCard({ signal, isNew, onTrade }: Props) {
         <div className="flex items-center gap-3 min-w-0">
           <ScoreRing score={signal.scanner_score} grade={signal.score_grade} size="md" />
           <div className="min-w-0">
-            {/* Name + badges row */}
+            {/* Name + badges */}
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="font-display font-bold text-[14px] text-[#e6e6e6] tracking-wide">
                 {signal.token_symbol}
@@ -78,15 +93,30 @@ export function TokenCard({ signal, isNew, onTrade }: Props) {
                   {tag}
                 </span>
               ))}
+              {rug && (
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded font-mono shrink-0 font-bold"
+                  style={{ color: rug.color, background: `${rug.color}12`, border: `1px solid ${rug.color}30` }}
+                >
+                  {rug.text}
+                </span>
+              )}
               {isNew && (
                 <span className="text-[9px] px-1.5 py-0.5 rounded font-mono text-[#00ff88] bg-[#00ff8812] border border-[#00ff8825] animate-pulse shrink-0">
                   NEW
                 </span>
               )}
             </div>
-            {/* Meta row */}
+            {/* Meta row — CA is tappable to copy */}
             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              <span className="text-[11px] text-[#444444] font-mono">{shortCA(signal.ca)}</span>
+              <button
+                onClick={copyCA}
+                className="text-[11px] font-mono transition-colors min-h-[20px]"
+                style={{ color: copied ? '#00ff88' : '#444444' }}
+                title="Copy contract address"
+              >
+                {copied ? '✓ copied' : shortCA(signal.ca)}
+              </button>
               <span className="text-[#2a2a2a]">·</span>
               <span className="text-[11px] text-[#555555]">{signal.contract_age_minutes}m</span>
               <span className="text-[#2a2a2a]">·</span>
@@ -154,6 +184,14 @@ export function TokenCard({ signal, isNew, onTrade }: Props) {
               <span className="text-[#2a2a2a]">·</span>
               <span style={{ color: signal.freeze_authority_revoked ? '#00ff88' : '#ff3355' }}>
                 {signal.freeze_authority_revoked ? '✓ Freeze' : '✗ Freeze'}
+              </span>
+            </>
+          )}
+          {signal.top_holder_pct !== null && signal.top_holder_pct > 0 && (
+            <>
+              <span className="text-[#2a2a2a]">·</span>
+              <span style={{ color: signal.top_holder_pct > 20 ? '#ff3355' : signal.top_holder_pct > 10 ? '#ffcc00' : '#555555' }}>
+                Top {signal.top_holder_pct.toFixed(1)}%
               </span>
             </>
           )}
