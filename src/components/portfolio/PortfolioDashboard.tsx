@@ -1,6 +1,5 @@
-import { useState, useRef } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import type { Position, Strategy, StrategyStats } from '../../types/backtest'
-import { formatUSD } from '../../lib/mockData'
 import { useWalletBalance } from '../../hooks/useWalletBalance'
 import { useAdmin } from '../../contexts/AdminContext'
 import { useWallet } from '@solana/wallet-adapter-react'
@@ -14,7 +13,7 @@ interface Props {
   onProfileOpen: () => void
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function holdTime(entry: string, exit: string | null): string {
   const ms = new Date(exit ?? new Date().toISOString()).getTime() - new Date(entry).getTime()
   const m = Math.floor(ms / 60_000)
@@ -28,247 +27,538 @@ function pnlPct(pos: Position): number {
   return pos.positionSizeSol > 0 ? (pos.totalPnlSol / pos.positionSizeSol) * 100 : 0
 }
 
+function fmtSol(n: number): string {
+  return Math.abs(n) >= 1 ? n.toFixed(3) : n.toFixed(4)
+}
+
+function fmtUSD(n: number, price: number): string {
+  const v = n * price
+  if (Math.abs(v) >= 1000) return `$${(v / 1000).toFixed(1)}K`
+  return `$${v.toFixed(2)}`
+}
 
 const STATUS_CFG: Record<string, { label: string; color: string }> = {
   open:           { label: 'LIVE',    color: '#00d4ff' },
-  closed_tp:      { label: 'TP HIT',  color: '#00ff88' },
-  closed_sl:      { label: 'SL HIT',  color: '#ff3355' },
-  closed_timeout: { label: 'TIMEOUT', color: '#ffcc00' },
-  closed_rug:     { label: 'RUGGED',  color: '#ff3355' },
+  closed_tp:      { label: 'TP',      color: '#00ff88' },
+  closed_sl:      { label: 'SL',      color: '#ff3355' },
+  closed_timeout: { label: 'TIME',    color: '#ffcc00' },
+  closed_rug:     { label: 'RUG',     color: '#ff3355' },
 }
 
-// ── WinRateBar ────────────────────────────────────────────────────────────────
-function WinRateBar({ rate, color }: { rate: number; color: string }) {
-  return (
-    <div className="h-1.5 bg-[#1e1e1e] rounded-full overflow-hidden">
-      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, rate)}%`, background: color }} />
-    </div>
-  )
-}
-
-// ── Open Position Card (Phantom token row style) ──────────────────────────────
-function OpenPositionCard({ pos, strategy }: { pos: Position; strategy: Strategy | undefined }) {
-  const pct = pos.unrealizedPnlPct
-  const pnlColor = pct >= 0 ? '#00ff88' : '#ff3355'
-  const strColor = strategy?.color ?? '#888888'
-  const mcapProgress = pos.entryMcap > 0 ? Math.min(100, (pos.currentMcap / pos.entryMcap) * 50) : 50
-
-  return (
-    <div
-      className="bg-[#111] border rounded-2xl overflow-hidden relative"
-      style={{
-        borderColor: pct >= 5 ? `${pnlColor}40` : '#1e1e1e',
-        boxShadow: pct >= 5 ? `0 0 20px ${pnlColor}08` : undefined,
-      }}
-    >
-      <div className="h-0.5 w-full" style={{ background: strColor }} />
-      <div className="p-4">
-        {/* Big PnL */}
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <p className="text-[32px] font-bold tabular-nums leading-none" style={{ color: pnlColor, fontFamily: "'Inter', sans-serif" }}>
-              {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%
-            </p>
-            <p className="text-[12px] font-mono mt-0.5" style={{ color: pnlColor }}>
-              {pos.unrealizedPnlSol >= 0 ? '+' : ''}{pos.unrealizedPnlSol.toFixed(4)} SOL
-            </p>
-          </div>
-          <span className="flex items-center gap-1 text-[9px] font-mono px-2 py-1 rounded-full bg-[#00d4ff10] text-[#00d4ff] border border-[#00d4ff25] shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#00d4ff]" style={{ animation: 'pill-dot-pulse 1.5s ease-in-out infinite' }} />
-            LIVE
-          </span>
-        </div>
-
-        {/* Token row */}
-        <div className="flex items-center gap-2 mb-3">
-          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: strColor }} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[15px] font-bold text-[#e8e8e8]" style={{ fontFamily: "'Inter', sans-serif" }}>
-                {pos.tokenSymbol}
-              </span>
-              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full"
-                style={{ color: strColor, background: `${strColor}18`, border: `1px solid ${strColor}30` }}>
-                {pos.strategyName}
-              </span>
-            </div>
-            <p className="text-[10px] font-mono text-[#444444]">{pos.source} · {holdTime(pos.entryTime, null)} in trade</p>
-          </div>
-          <div className="text-right shrink-0">
-            <p className="text-[12px] font-mono text-[#888888]">{pos.positionSizeSol.toFixed(2)} SOL</p>
-            <p className="text-[9px] font-mono text-[#444444]">size</p>
-          </div>
-        </div>
-
-        {/* Progress bar: entry → current */}
-        <div className="space-y-1">
-          <div className="flex justify-between text-[9px] font-mono text-[#444444]">
-            <span>ENTRY {formatUSD(pos.entryMcap)}</span>
-            <span>NOW {formatUSD(pos.currentMcap)}</span>
-          </div>
-          <div className="h-1 bg-[#1a1a1a] rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{ width: `${mcapProgress}%`, background: pnlColor, opacity: 0.7 }}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Best Trade Card (leaderboard style) ───────────────────────────────────────
-function BestTradeCard({ pos, rank, strategy }: { pos: Position; rank: number; strategy: Strategy | undefined }) {
-  const pct = pnlPct(pos)
-  const pnlColor = pct >= 0 ? '#00ff88' : '#ff3355'
-  const strColor = strategy?.color ?? '#888888'
-  const status = STATUS_CFG[pos.status] ?? { label: pos.status, color: '#888888' }
-  const hold = holdTime(pos.entryTime, pos.exitTime)
-  const exitMcap = pos.currentMcap > 0 ? pos.currentMcap : pos.entryMcap
-  const multiplier = pos.entryMcap > 0 ? exitMcap / pos.entryMcap : 1
-
-  const rankBadgeStyle =
-    rank === 1
-      ? { color: '#0d0d0d', background: '#ffd700', border: '1px solid #ffd700' }
-      : rank === 2
-      ? { color: '#0d0d0d', background: '#c0c0c0', border: '1px solid #c0c0c0' }
-      : rank === 3
-      ? { color: '#0d0d0d', background: '#cd7f32', border: '1px solid #cd7f32' }
-      : { color: '#888888', background: '#1a1a1a', border: '1px solid #2a2a2a' }
-
-  return (
-    <div
-      className="bg-[#111] border rounded-2xl overflow-hidden relative"
-      style={{
-        borderColor: rank <= 3 ? `${pnlColor}50` : rank <= 10 ? `${pnlColor}25` : '#1e1e1e',
-        boxShadow: rank === 1 ? `0 0 32px ${pnlColor}15` : rank <= 3 ? `0 0 16px ${pnlColor}08` : undefined,
-      }}
-    >
-      <div className="h-0.5" style={{ background: rank <= 3 ? pnlColor : strColor }} />
-      <div className="p-4">
-        <div className="flex items-start gap-3">
-          {/* Rank badge */}
-          <span
-            className="text-[11px] font-mono font-bold px-2 py-1 rounded-lg shrink-0"
-            style={rankBadgeStyle}
-          >
-            #{rank}
-          </span>
-
-          {/* Main content */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between mb-1">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[15px] font-bold text-[#e8e8e8]" style={{ fontFamily: "'Inter', sans-serif" }}>
-                    {pos.tokenSymbol}
-                  </span>
-                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full"
-                    style={{ color: strColor, background: `${strColor}18`, border: `1px solid ${strColor}30` }}>
-                    {pos.strategyName}
-                  </span>
-                </div>
-                <p className="text-[10px] font-mono text-[#444444] mt-0.5">{hold} hold</p>
-              </div>
-              <span className="text-[9px] font-mono px-2 py-1 rounded-full shrink-0"
-                style={{ color: status.color, background: `${status.color}15`, border: `1px solid ${status.color}25` }}>
-                {status.label}
-              </span>
-            </div>
-
-            {/* PnL row */}
-            <div className="flex items-end justify-between mt-2">
-              <div>
-                <p className="text-[28px] font-bold tabular-nums leading-none" style={{ color: pnlColor, fontFamily: "'Inter', sans-serif" }}>
-                  {pct >= 0 ? '+' : ''}{pct.toFixed(0)}%
-                </p>
-                <p className="text-[11px] font-mono mt-0.5" style={{ color: pnlColor }}>
-                  {pos.totalPnlSol >= 0 ? '+' : ''}{pos.totalPnlSol.toFixed(4)} SOL
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-[20px] font-bold tabular-nums" style={{ color: multiplier >= 2 ? '#ffd700' : '#888888', fontFamily: "'Inter', sans-serif" }}>
-                  {multiplier.toFixed(1)}×
-                </p>
-                <p className="text-[9px] font-mono text-[#444444]">mcap mult</p>
-              </div>
-            </div>
-
-            {/* MCap journey */}
-            <div className="flex items-center gap-2 mt-2">
-              <div className="flex-1 bg-[#0d0d0d] rounded-lg p-1.5 text-center">
-                <p className="text-[9px] font-mono text-[#444444]">ENTRY</p>
-                <p className="text-[10px] font-mono text-[#888888]">{formatUSD(pos.entryMcap)}</p>
-              </div>
-              <svg width="16" height="10" viewBox="0 0 20 12" fill="none">
-                <path d="M0 6h16m0 0l-5-5m5 5l-5 5" stroke={pnlColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <div className="flex-1 bg-[#0d0d0d] rounded-lg p-1.5 text-center">
-                <p className="text-[9px] font-mono text-[#444444]">EXIT</p>
-                <p className="text-[10px] font-mono text-[#888888]">{formatUSD(exitMcap)}</p>
-              </div>
-            </div>
-
-            {pos.partialExits.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {pos.partialExits.map((pe, i) => (
-                  <span key={i} className="text-[9px] font-mono px-1.5 py-0.5 rounded-full"
-                    style={{ color: '#00ff88', background: '#00ff8810', border: '1px solid #00ff8825' }}>
-                    TP{i + 1} +{pe.pnlPct.toFixed(0)}%
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Circular balance gauge ────────────────────────────────────────────────────
-function BalanceRing({ winRate, size = 160 }: { winRate: number; size?: number }) {
-  const R = size / 2 - 12
+// ── PortfolioDonut ─────────────────────────────────────────────────────────────
+function PortfolioDonut({
+  solBalance, usdBalance, winRate, pnlSol, showUsd, onToggle,
+}: {
+  solBalance: number; usdBalance: number; winRate: number; pnlSol: number;
+  showUsd: boolean; onToggle: () => void;
+}) {
+  const SIZE = 210, R = 82, CX = SIZE / 2, CY = SIZE / 2, SW = 13
   const C = 2 * Math.PI * R
-  const filled = (Math.min(100, winRate) / 100) * C
+  const filled = (Math.min(100, Math.max(0, winRate)) / 100) * C * 0.85 // 85% max arc
+  const pnlColor = pnlSol >= 0 ? '#00ff88' : '#ff3355'
+
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
-      {/* Track */}
-      <circle cx={size/2} cy={size/2} r={R} fill="none" stroke="#1a1a1a" strokeWidth="10"/>
-      {/* Win rate arc */}
-      <circle cx={size/2} cy={size/2} r={R} fill="none"
-        stroke="url(#balGrad)" strokeWidth="10"
-        strokeLinecap="round"
-        strokeDasharray={`${filled} ${C - filled}`}
-        transform={`rotate(-90 ${size/2} ${size/2})`}/>
-      <defs>
-        <linearGradient id="balGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#00d4ff"/>
-          <stop offset="100%" stopColor="#00ff88"/>
-        </linearGradient>
-      </defs>
-    </svg>
+    <button
+      onClick={onToggle}
+      className="relative cursor-pointer select-none active:scale-95 transition-transform"
+      style={{ width: SIZE, height: SIZE }}
+      aria-label="Toggle SOL / USD"
+    >
+      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+        <defs>
+          <linearGradient id="dGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#7c3aed" />
+            <stop offset="60%" stopColor="#6366f1" />
+            <stop offset="100%" stopColor="#00d4ff" />
+          </linearGradient>
+          {/* Glow filter */}
+          <filter id="dGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="4" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        {/* Track */}
+        <circle cx={CX} cy={CY} r={R} fill="none" stroke="#1e1e1e" strokeWidth={SW} />
+        {/* Progress arc */}
+        <circle
+          cx={CX} cy={CY} r={R} fill="none"
+          stroke="url(#dGrad)" strokeWidth={SW}
+          strokeLinecap="round"
+          strokeDasharray={`${filled} ${C - filled}`}
+          transform={`rotate(-90 ${CX} ${CY})`}
+          filter="url(#dGlow)"
+        />
+        {/* Win rate dot */}
+        {winRate > 0 && (
+          <circle
+            cx={CX + R * Math.cos((-90 + (winRate / 100) * 0.85 * 360) * Math.PI / 180)}
+            cy={CY + R * Math.sin((-90 + (winRate / 100) * 0.85 * 360) * Math.PI / 180)}
+            r="4" fill="#fff" opacity="0.9"
+          />
+        )}
+      </svg>
+
+      {/* Center text */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <p className="text-[9px] font-mono text-[#444] uppercase tracking-widest mb-1">
+          {showUsd ? 'USD value' : 'Solana balance'}
+        </p>
+        <p className="text-[26px] font-bold tabular-nums leading-none" style={{ color: '#f0f0f0', fontFamily: "'Inter', sans-serif" }}>
+          {showUsd
+            ? `$${usdBalance >= 1000 ? (usdBalance / 1000).toFixed(2) + 'K' : usdBalance.toFixed(2)}`
+            : `${fmtSol(solBalance)}`
+          }
+        </p>
+        <p className="text-[10px] font-mono text-[#444] mt-0.5">
+          {showUsd ? `${fmtSol(solBalance)} SOL` : `$${usdBalance.toFixed(2)}`}
+        </p>
+        {pnlSol !== 0 && (
+          <p className="text-[10px] font-mono mt-1.5 font-bold" style={{ color: pnlColor }}>
+            {pnlSol >= 0 ? '+' : ''}{fmtSol(pnlSol)} SOL paper
+          </p>
+        )}
+        <p className="text-[8px] font-mono text-[#2a2a2a] mt-1">tap to switch</p>
+      </div>
+    </button>
+  )
+}
+
+// ── Area Chart ────────────────────────────────────────────────────────────────
+type TimeRange = '1D' | '1W' | '1M' | 'ALL'
+
+function PortfolioChart({ positions }: { positions: Position[] }) {
+  const [range, setRange] = useState<TimeRange>('ALL')
+
+  const allPoints = useMemo(() => {
+    const closed = positions
+      .filter(p => p.exitTime)
+      .sort((a, b) => new Date(a.exitTime!).getTime() - new Date(b.exitTime!).getTime())
+
+    if (closed.length === 0) return null
+
+    let running = 0
+    const pts: { t: number; v: number }[] = [
+      { t: new Date(closed[0].exitTime!).getTime() - 60_000, v: 0 },
+    ]
+    for (const pos of closed) {
+      running += pos.totalPnlSol
+      pts.push({ t: new Date(pos.exitTime!).getTime(), v: running })
+    }
+    // ensure we have current time at end
+    if (pts[pts.length - 1].t < Date.now() - 60_000) {
+      pts.push({ t: Date.now(), v: running })
+    }
+    return pts
+  }, [positions])
+
+  const points = useMemo(() => {
+    if (!allPoints) return null
+    const now = Date.now()
+    const cutoff = range === '1D' ? now - 86_400_000
+      : range === '1W' ? now - 7 * 86_400_000
+      : range === '1M' ? now - 30 * 86_400_000
+      : 0
+    const f = allPoints.filter(p => p.t >= cutoff)
+    return f.length >= 2 ? f : allPoints
+  }, [allPoints, range])
+
+  const currentPnl = points ? points[points.length - 1].v : 0
+  const isUp = currentPnl >= 0
+  const lineColor = isUp ? '#a78bfa' : '#f87171'
+  const fillColor = isUp ? '#7c3aed' : '#dc2626'
+
+  function buildPath(pts: { t: number; v: number }[], W: number, H: number) {
+    const minV = Math.min(...pts.map(p => p.v))
+    const maxV = Math.max(...pts.map(p => p.v))
+    const vRange = maxV - minV || 0.0001
+    const pad = 12
+    const toX = (i: number) => (i / (pts.length - 1)) * W
+    const toY = (v: number) => H - pad - ((v - minV) / vRange) * (H - pad * 2)
+
+    // Smooth bezier
+    let d = `M ${toX(0).toFixed(1)} ${toY(pts[0].v).toFixed(1)}`
+    for (let i = 1; i < pts.length; i++) {
+      const px = toX(i - 1), py = toY(pts[i - 1].v)
+      const cx = toX(i), cy = toY(pts[i].v)
+      const cpx = (px + cx) / 2
+      d += ` C ${cpx.toFixed(1)} ${py.toFixed(1)} ${cpx.toFixed(1)} ${cy.toFixed(1)} ${cx.toFixed(1)} ${cy.toFixed(1)}`
+    }
+
+    const lastX = toX(pts.length - 1).toFixed(1)
+    const area = d + ` L ${lastX} ${H} L 0 ${H} Z`
+    const lastY = toY(pts[pts.length - 1].v)
+    return { line: d, area, lastX: parseFloat(lastX), lastY }
+  }
+
+  const W = 320, H = 130
+  const chartData = points ? buildPath(points, W, H) : null
+
+  return (
+    <div className="bg-[#111111] rounded-2xl border border-[#1a1a1a] overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+        <div>
+          <p className="text-[11px] font-mono text-[#444] uppercase tracking-wider">Performance</p>
+          <p className="text-[20px] font-bold tabular-nums mt-0.5" style={{ color: isUp ? '#a78bfa' : '#f87171', fontFamily: "'Inter', sans-serif" }}>
+            {currentPnl >= 0 ? '+' : ''}{fmtSol(currentPnl)} SOL
+          </p>
+        </div>
+        {/* Time range */}
+        <div className="flex gap-1 bg-[#0d0d0d] rounded-xl p-1">
+          {(['1D', '1W', '1M', 'ALL'] as TimeRange[]).map(r => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className="text-[10px] font-mono px-2 py-1 rounded-lg transition-all cursor-pointer"
+              style={{
+                background: range === r ? '#1e1e1e' : 'transparent',
+                color: range === r ? '#e6e6e6' : '#444',
+              }}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="px-2 pb-3">
+        {!chartData ? (
+          <div className="flex items-center justify-center h-[130px]">
+            <p className="text-[11px] font-mono text-[#2a2a2a]">No closed trades yet</p>
+          </div>
+        ) : (
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            className="w-full"
+            style={{ height: H, display: 'block' }}
+            preserveAspectRatio="none"
+          >
+            <defs>
+              <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={fillColor} stopOpacity="0.35" />
+                <stop offset="75%" stopColor={fillColor} stopOpacity="0.06" />
+                <stop offset="100%" stopColor={fillColor} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            {/* Subtle horizontal grid lines */}
+            {[0.25, 0.5, 0.75].map(f => (
+              <line key={f} x1="0" y1={H * f} x2={W} y2={H * f}
+                stroke="#1a1a1a" strokeWidth="1" />
+            ))}
+            {/* Fill */}
+            <path d={chartData.area} fill="url(#chartFill)" />
+            {/* Line */}
+            <path d={chartData.line} fill="none" stroke={lineColor} strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round" />
+            {/* End dot */}
+            <circle cx={chartData.lastX} cy={chartData.lastY} r="4" fill={lineColor} />
+            <circle cx={chartData.lastX} cy={chartData.lastY} r="7" fill={lineColor} opacity="0.25" />
+          </svg>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Allocation Donut ──────────────────────────────────────────────────────────
+function AllocationDonut({ strategies, stats }: { strategies: Strategy[]; stats: Record<string, StrategyStats> }) {
+  const SIZE = 140, R = 52, CX = SIZE / 2, CY = SIZE / 2, SW = 14
+  const GAP = 0.06 // radians gap between segments
+
+  const segments = strategies
+    .map(s => ({
+      id: s.id, name: s.name, color: s.color,
+      trades: stats[s.id]?.totalTrades ?? 0,
+      pnl: stats[s.id]?.totalPnlSol ?? 0,
+    }))
+    .filter(s => s.trades > 0)
+
+  const total = segments.reduce((s, seg) => s + seg.trades, 0)
+
+  if (total === 0) {
+    return (
+      <div className="flex items-center justify-center" style={{ width: SIZE, height: SIZE }}>
+        <div className="text-center">
+          <p className="text-[10px] font-mono text-[#2a2a2a]">No trades</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Build arc paths
+  let angle = -Math.PI / 2
+  const arcs = segments.map(seg => {
+    const frac = seg.trades / total
+    const sweep = frac * Math.PI * 2 - GAP
+    const start = angle + GAP / 2
+    const end = start + sweep
+    angle += frac * Math.PI * 2
+
+    const x1 = CX + R * Math.cos(start), y1 = CY + R * Math.sin(start)
+    const x2 = CX + R * Math.cos(end),   y2 = CY + R * Math.sin(end)
+    const large = sweep > Math.PI ? 1 : 0
+    const d = `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${R} ${R} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`
+
+    return { ...seg, d, pct: Math.round(frac * 100) }
+  })
+
+  return (
+    <div className="flex items-center gap-4">
+      <div className="relative shrink-0" style={{ width: SIZE, height: SIZE }}>
+        <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+          <circle cx={CX} cy={CY} r={R} fill="none" stroke="#1a1a1a" strokeWidth={SW} />
+          {arcs.map(arc => (
+            <path key={arc.id} d={arc.d} fill="none"
+              stroke={arc.color} strokeWidth={SW} strokeLinecap="round" />
+          ))}
+        </svg>
+        {/* Center */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <p className="text-[16px] font-bold text-[#e6e6e6]" style={{ fontFamily: "'Inter', sans-serif" }}>{total}</p>
+          <p className="text-[8px] font-mono text-[#444] uppercase tracking-wider">trades</p>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex-1 min-w-0 space-y-2">
+        {arcs.slice(0, 5).map(arc => (
+          <div key={arc.id} className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: arc.color }} />
+            <span className="text-[10px] font-mono text-[#666] flex-1 truncate">{arc.name}</span>
+            <span className="text-[10px] font-mono tabular-nums shrink-0" style={{ color: arc.pnl >= 0 ? '#00ff88' : '#ff3355' }}>
+              {arc.pnl >= 0 ? '+' : ''}{fmtSol(arc.pnl)}
+            </span>
+            <span className="text-[9px] font-mono text-[#333] shrink-0 w-7 text-right">{arc.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Action button ─────────────────────────────────────────────────────────────
+function ActionBtn({
+  icon, label, color, onClick,
+}: {
+  icon: React.ReactNode; label: string; color: string; onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center gap-2 cursor-pointer group"
+    >
+      <div
+        className="w-14 h-14 rounded-2xl flex items-center justify-center transition-all group-active:scale-95"
+        style={{ background: `${color}15`, border: `1px solid ${color}25` }}
+      >
+        <span style={{ color }}>{icon}</span>
+      </div>
+      <span className="text-[10px] font-mono" style={{ color: '#555' }}>{label}</span>
+    </button>
+  )
+}
+
+// ── Deposit Modal ─────────────────────────────────────────────────────────────
+function DepositModal({ walletPk, onClose }: { walletPk?: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false)
+
+  function copy() {
+    if (!walletPk) return
+    navigator.clipboard.writeText(walletPk).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1800)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
+      <div className="relative w-full sm:w-96 bg-[#0d0d0d] border border-[#1e1e1e] rounded-t-3xl sm:rounded-3xl p-6 z-10 space-y-5">
+        <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-[#444] hover:text-[#888] cursor-pointer rounded-lg">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+
+        {/* Icon */}
+        <div className="flex flex-col items-center gap-3 pt-2">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-[#7c3aed15] border border-[#7c3aed25]">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2v16M5 9l7-7 7 7"/>
+              <path d="M5 22h14"/>
+            </svg>
+          </div>
+          <h2 className="text-[15px] font-bold text-[#e6e6e6]">Deposit SOL</h2>
+          <p className="text-[11px] font-mono text-[#444] text-center">
+            Send SOL to your connected wallet address below
+          </p>
+        </div>
+
+        {/* Address */}
+        <div className="bg-[#080808] border border-[#1e1e1e] rounded-2xl p-4 space-y-2">
+          <p className="text-[9px] font-mono text-[#333] uppercase tracking-widest">Your Solana address</p>
+          {walletPk ? (
+            <>
+              <p className="text-[11px] font-mono text-[#888] break-all leading-relaxed">{walletPk}</p>
+              <button
+                onClick={copy}
+                className="w-full min-h-[44px] rounded-xl text-[12px] font-mono font-bold transition-all cursor-pointer mt-1"
+                style={{
+                  background: copied ? '#00ff8815' : '#7c3aed18',
+                  border: copied ? '1px solid #00ff8840' : '1px solid #7c3aed40',
+                  color: copied ? '#00ff88' : '#a78bfa',
+                }}
+              >
+                {copied ? '✓ Copied!' : 'Copy Address'}
+              </button>
+            </>
+          ) : (
+            <p className="text-[11px] font-mono text-[#444] py-2">Connect wallet to show address</p>
+          )}
+        </div>
+
+        <p className="text-[9px] font-mono text-[#2a2a2a] text-center">
+          Only send SOL and SPL tokens on Solana network
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ── Withdraw Modal ────────────────────────────────────────────────────────────
+function WithdrawModal({ onClose, solBalance, solPrice }: { onClose: () => void; solBalance: number; solPrice: number }) {
+  return (
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
+      <div className="relative w-full sm:w-96 bg-[#0d0d0d] border border-[#1e1e1e] rounded-t-3xl sm:rounded-3xl p-6 z-10 space-y-5">
+        <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-[#444] hover:text-[#888] cursor-pointer rounded-lg">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+
+        <div className="flex flex-col items-center gap-3 pt-2">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-[#ff355515] border border-[#ff355525]">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff3355" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22V6M5 15l7 7 7-7"/>
+              <path d="M5 2h14"/>
+            </svg>
+          </div>
+          <h2 className="text-[15px] font-bold text-[#e6e6e6]">Withdraw SOL</h2>
+        </div>
+
+        {/* Balance */}
+        <div className="bg-[#080808] border border-[#1e1e1e] rounded-2xl p-4">
+          <p className="text-[9px] font-mono text-[#333] uppercase tracking-widest mb-2">Available</p>
+          <p className="text-[24px] font-bold tabular-nums text-[#e6e6e6]" style={{ fontFamily: "'Inter', sans-serif" }}>
+            {fmtSol(solBalance)} <span className="text-[14px] text-[#444]">SOL</span>
+          </p>
+          <p className="text-[12px] font-mono text-[#555]">${(solBalance * solPrice).toFixed(2)} USD</p>
+        </div>
+
+        {/* Guidance */}
+        <div className="bg-[#0f0a00] border border-[#ffcc0020] rounded-2xl p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffcc00" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <p className="text-[11px] font-mono text-[#ffcc00] font-bold">Use your wallet app</p>
+          </div>
+          <p className="text-[10px] font-mono text-[#555] leading-relaxed">
+            To withdraw SOL, open Phantom or Solflare, select Send, and enter the destination address. Sentinel Terminal does not execute transactions on your behalf.
+          </p>
+        </div>
+
+        <button
+          onClick={onClose}
+          className="w-full min-h-[44px] rounded-2xl text-[12px] font-mono font-bold bg-[#1a1a1a] border border-[#2a2a2a] text-[#555] hover:text-[#888] transition-all cursor-pointer"
+        >
+          Got it
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Transaction Row ───────────────────────────────────────────────────────────
+function TransactionRow({ pos, strategy }: { pos: Position; strategy?: Strategy }) {
+  const pct = pnlPct(pos)
+  const pnlColor = pos.totalPnlSol >= 0 ? '#00ff88' : '#ff3355'
+  const strColor = strategy?.color ?? '#555'
+  const status = STATUS_CFG[pos.status] ?? { label: pos.status.toUpperCase(), color: '#888' }
+  const isOpen = pos.status === 'open'
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 active:bg-[#0f0f0f] transition-colors">
+      {/* Token circle */}
+      <div
+        className="w-10 h-10 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
+        style={{ background: `${strColor}18`, border: `1.5px solid ${strColor}30`, color: strColor }}
+      >
+        {pos.tokenSymbol.slice(0, 2).toUpperCase()}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13px] font-bold text-[#e6e6e6] truncate" style={{ fontFamily: "'Inter', sans-serif" }}>
+            {pos.tokenSymbol}
+          </span>
+          <span
+            className="text-[8px] font-mono px-1.5 py-0.5 rounded-full shrink-0"
+            style={{ color: status.color, background: `${status.color}15` }}
+          >
+            {status.label}
+          </span>
+        </div>
+        <p className="text-[10px] font-mono text-[#444]">
+          {strategy?.name ?? 'Unknown'} · {isOpen ? `${holdTime(pos.entryTime, null)} open` : holdTime(pos.entryTime, pos.exitTime)}
+        </p>
+      </div>
+
+      {/* PnL */}
+      <div className="text-right shrink-0">
+        <p className="text-[13px] font-mono font-bold tabular-nums" style={{ color: pnlColor }}>
+          {isOpen
+            ? `${pos.unrealizedPnlSol >= 0 ? '+' : ''}${pos.unrealizedPnlSol.toFixed(4)}`
+            : `${pos.totalPnlSol >= 0 ? '+' : ''}${pos.totalPnlSol.toFixed(4)}`
+          }
+        </p>
+        <p className="text-[10px] font-mono tabular-nums" style={{ color: pnlColor }}>
+          {isOpen ? `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%` : `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`}
+        </p>
+      </div>
+    </div>
   )
 }
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
-type SubTab = 'overview' | 'open' | 'best'
+type SubTab = 'overview' | 'chart' | 'positions' | 'history'
 
 export function PortfolioDashboard({ strategies, positions, stats, solPrice, onClear, onProfileOpen }: Props) {
   const [subTab, setSubTab] = useState<SubTab>('overview')
+  const [showUsd, setShowUsd] = useState(false)
+  const [showDeposit, setShowDeposit] = useState(false)
+  const [showWithdraw, setShowWithdraw] = useState(false)
   const [balanceEditOpen, setBalanceEditOpen] = useState(false)
   const [fakeBalanceInput, setFakeBalanceInput] = useState('')
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const { balance } = useWalletBalance()
   const { profile, fakeBalance, setFakeBalance } = useAdmin()
   const { publicKey } = useWallet()
-
   const walletPk = publicKey?.toBase58()
 
-  // The balance shown — fakeBalance overrides real when set
-  const displayBalance = fakeBalance !== null ? fakeBalance : balance
+  const displayBalance = fakeBalance !== null ? fakeBalance : (balance ?? 0)
+  const displayUsd = displayBalance * solPrice
 
+  const allOpen   = positions.filter(p => p.status === 'open')
+  const allClosed = positions.filter(p => p.status !== 'open')
+  const winners   = allClosed.filter(p => p.totalPnlSol > 0)
+
+  const totalPnlSol    = positions.reduce((s, p) => s + p.totalPnlSol, 0)
+  const winRate        = allClosed.length > 0 ? (winners.length / allClosed.length) * 100 : 0
+  const capitalAtRisk  = allOpen.reduce((s, p) => s + p.positionSizeSol * (p.remainingPct / 100), 0)
+
+  const pnlColor = totalPnlSol >= 0 ? '#00ff88' : '#ff3355'
+
+  // Long-press on balance area to set fake balance
   function handleBalancePressStart() {
     pressTimer.current = setTimeout(() => {
       setFakeBalanceInput(fakeBalance !== null ? String(fakeBalance) : balance !== null ? balance.toFixed(4) : '')
@@ -284,402 +574,307 @@ export function PortfolioDashboard({ strategies, positions, stats, solPrice, onC
     setBalanceEditOpen(false)
   }
 
-  const allClosed = positions.filter(p => p.status !== 'open')
-  const allOpen   = positions.filter(p => p.status === 'open')
-  const winners   = allClosed.filter(p => p.totalPnlSol > 0)
-
-  const totalPnlSol    = positions.reduce((s, p) => s + p.totalPnlSol, 0)
-  const totalPnlUsd    = totalPnlSol * solPrice
-  const winRate        = allClosed.length > 0 ? (winners.length / allClosed.length) * 100 : 0
-  const capitalAtRisk  = allOpen.reduce((s, p) => s + p.positionSizeSol * (p.remainingPct / 100), 0)
-
-  const bestStrategy = strategies.reduce<Strategy | null>((best, s) => {
-    const st = stats[s.id]
-    if (!st || st.totalTrades === 0) return best
-    if (!best || (stats[best.id]?.winRate ?? 0) < st.winRate) return s
-    return best
-  }, null)
-
-  const pnlColor     = totalPnlSol >= 0 ? '#00ff88' : '#ff3355'
-  const winRateColor = winRate >= 80 ? '#00ff88' : winRate >= 60 ? '#ffcc00' : '#ff3355'
-
-  const bestTrades = [...allClosed].sort((a, b) => pnlPct(b) - pnlPct(a)).slice(0, 20)
+  const recentTransactions = [...positions]
+    .sort((a, b) => {
+      const ta = new Date(a.exitTime ?? a.entryTime).getTime()
+      const tb = new Date(b.exitTime ?? b.entryTime).getTime()
+      return tb - ta
+    })
+    .slice(0, 25)
 
   return (
-    <div className="h-full overflow-y-auto overscroll-contain">
-      <div className="max-w-4xl mx-auto">
+    <div className="h-full overflow-y-auto overscroll-contain bg-[#080808]">
+      {/* ── Hero section ─────────────────────────────────────────────────── */}
+      <div
+        className="relative overflow-hidden"
+        style={{ background: 'linear-gradient(160deg, #0f0820 0%, #090c1a 45%, #070809 100%)' }}
+      >
+        {/* Radial glow */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[400px] h-[200px] pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(124,58,237,0.12) 0%, transparent 70%)' }} />
 
-        {/* ── Figma-inspired balance header ─────────────────────────────── */}
-        <div className="relative overflow-hidden rounded-2xl mx-4 mt-4 mb-2"
-          style={{ background: 'linear-gradient(135deg, #0d1117 0%, #0a0f1a 50%, #0d0d1a 100%)' }}>
-          {/* Subtle radial glow */}
-          <div className="absolute inset-0 pointer-events-none"
-            style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(0,212,255,0.06) 0%, transparent 70%)' }}/>
-
-          <div className="relative p-5">
-            {/* Profile row */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2.5">
-                {/* Avatar — tap to edit profile */}
-                <button
-                  onClick={onProfileOpen}
-                  aria-label="Edit profile"
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0 cursor-pointer transition-all hover:opacity-80 active:scale-95 select-none"
-                  style={{ background: `${profile.avatarColor}20`, border: `2px solid ${profile.avatarColor}40`, color: profile.avatarColor }}
-                >
-                  {profile.username.slice(0, 2)}
-                </button>
-                <div>
-                  <p className="text-[12px] font-bold text-[#e6e6e6]" style={{ fontFamily: "'Inter', sans-serif" }}>{profile.username}</p>
-                  {walletPk && (
-                    <p className="text-[10px] font-mono text-[#444]">{walletPk.slice(0,4)}...{walletPk.slice(-4)}</p>
-                  )}
-                </div>
-              </div>
-              {/* Clear button */}
-              <button onClick={onClear}
-                className="text-[10px] font-mono px-2.5 py-1.5 rounded-lg border border-[#1e1e1e] text-[#444444] hover:text-[#888888] transition-all cursor-pointer">
-                Clear
+        <div className="relative px-4 pt-4 pb-6">
+          {/* Profile row */}
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2.5">
+              <button onClick={onProfileOpen} aria-label="Edit profile"
+                className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold cursor-pointer transition-all hover:opacity-80 active:scale-95 select-none"
+                style={{ background: `${profile.avatarColor}20`, border: `2px solid ${profile.avatarColor}50`, color: profile.avatarColor }}>
+                {profile.username.slice(0, 2)}
               </button>
-            </div>
-
-            {/* Balance + ring */}
-            <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-mono text-[#555555] mb-1 uppercase tracking-wider">SOL Balance</p>
-                {balanceEditOpen ? (
-                  <input
-                    type="number"
-                    value={fakeBalanceInput}
-                    onChange={e => setFakeBalanceInput(e.target.value)}
-                    onBlur={commitFakeBalance}
-                    onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setBalanceEditOpen(false) } }}
-                    className="w-36 bg-transparent border-b border-[#2a2a2a] text-[32px] font-bold tabular-nums text-[#f0f0f0] leading-none outline-none mb-1"
-                    style={{ fontFamily: "'Inter', sans-serif" }}
-                    autoFocus
-                  />
-                ) : (
-                  <p
-                    className="text-[32px] font-bold tabular-nums text-[#f0f0f0] leading-none select-none"
-                    style={{ fontFamily: "'Inter', sans-serif", WebkitUserSelect: 'none' }}
-                    onMouseDown={handleBalancePressStart}
-                    onMouseUp={handleBalancePressEnd}
-                    onMouseLeave={handleBalancePressEnd}
-                    onTouchStart={handleBalancePressStart}
-                    onTouchEnd={handleBalancePressEnd}
-                    onContextMenu={e => e.preventDefault()}
-                  >
-                    {displayBalance !== null ? displayBalance.toFixed(4) : '-.----'}
-                  </p>
-                )}
-                <p className="text-[14px] font-mono text-[#555555] mt-1">
-                  ${displayBalance !== null ? (displayBalance * solPrice).toFixed(2) : '--.--'}
+                <p className="text-[12px] font-bold text-[#e6e6e6]" style={{ fontFamily: "'Inter', sans-serif" }}>
+                  {profile.username}
                 </p>
-                {/* Paper PnL chip */}
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono font-bold"
-                    style={{
-                      color: pnlColor,
-                      background: `${pnlColor}12`,
-                      border: `1px solid ${pnlColor}25`
-                    }}>
-                    <span>{totalPnlSol >= 0 ? '+' : ''}{totalPnlSol.toFixed(3)} SOL</span>
-                    <span style={{ color: `${pnlColor}80` }}>paper</span>
-                  </div>
-                  {/* Available capital when fakeBalance is set */}
-                  {fakeBalance !== null && (
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono"
-                      style={{ color: '#555', background: '#0d0d0d', border: '1px solid #1e1e1e' }}>
-                      <span style={{ color: '#00d4ff' }}>
-                        {Math.max(0, fakeBalance - capitalAtRisk).toFixed(3)}
-                      </span>
-                      <span>avail</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              {/* Circular gauge */}
-              <div className="relative shrink-0">
-                <BalanceRing winRate={winRate} size={130}/>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <p className="text-[20px] font-bold tabular-nums" style={{ color: winRateColor, fontFamily: "'Inter', sans-serif" }}>
-                    {allClosed.length > 0 ? `${winRate.toFixed(0)}%` : '—'}
-                  </p>
-                  <p className="text-[9px] font-mono text-[#444]">WIN RATE</p>
-                </div>
+                {walletPk && (
+                  <p className="text-[9px] font-mono text-[#333]">{walletPk.slice(0, 4)}…{walletPk.slice(-4)}</p>
+                )}
               </div>
             </div>
+            <button onClick={onClear}
+              className="text-[10px] font-mono px-2.5 py-1.5 rounded-xl border border-[#1e1e1e] text-[#333] hover:text-[#666] transition-all cursor-pointer">
+              Clear
+            </button>
+          </div>
 
-            {/* Action buttons row — also serve as tab switcher */}
-            <div className="flex gap-3 mt-4">
-              {([
-                { label: 'Positions', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>, tab: 'open' as const },
-                { label: 'Best', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>, tab: 'best' as const },
-                { label: 'Overview', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>, tab: 'overview' as const },
-              ] as const).map(btn => (
-                <button key={btn.tab} onClick={() => setSubTab(btn.tab)}
-                  className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-xl border transition-all cursor-pointer"
-                  style={{
-                    borderColor: subTab === btn.tab ? '#00d4ff30' : '#1e1e1e',
-                    background: subTab === btn.tab ? '#00d4ff0a' : '#0d0d0d',
-                    color: subTab === btn.tab ? '#00d4ff' : '#444444',
-                  }}>
-                  {btn.icon}
-                  <span className="text-[9px] font-mono">{btn.label}</span>
-                </button>
-              ))}
+          {/* Donut + balance (centered) */}
+          <div className="flex flex-col items-center">
+            {balanceEditOpen ? (
+              <div className="flex flex-col items-center gap-3 py-4">
+                <p className="text-[10px] font-mono text-[#444] uppercase tracking-widest">Set balance</p>
+                <input
+                  type="number"
+                  value={fakeBalanceInput}
+                  onChange={e => setFakeBalanceInput(e.target.value)}
+                  onBlur={commitFakeBalance}
+                  onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setBalanceEditOpen(false) }}
+                  className="bg-transparent border-b border-[#2a2a2a] text-[32px] font-bold tabular-nums text-[#f0f0f0] outline-none text-center w-48"
+                  style={{ fontFamily: "'Inter', sans-serif" }}
+                  autoFocus
+                />
+                <p className="text-[9px] font-mono text-[#2a2a2a]">SOL · press Enter to confirm</p>
+              </div>
+            ) : (
+              <div
+                onMouseDown={handleBalancePressStart}
+                onMouseUp={handleBalancePressEnd}
+                onMouseLeave={handleBalancePressEnd}
+                onTouchStart={handleBalancePressStart}
+                onTouchEnd={handleBalancePressEnd}
+                onContextMenu={e => e.preventDefault()}
+              >
+                <PortfolioDonut
+                  solBalance={displayBalance}
+                  usdBalance={displayUsd}
+                  winRate={winRate}
+                  pnlSol={totalPnlSol}
+                  showUsd={showUsd}
+                  onToggle={() => setShowUsd(v => !v)}
+                />
+              </div>
+            )}
+
+            {/* Stat chips */}
+            <div className="flex items-center gap-2 mt-2 flex-wrap justify-center">
+              {fakeBalance !== null && (
+                <span className="text-[9px] font-mono px-2 py-1 rounded-full"
+                  style={{ color: '#00d4ff', background: '#00d4ff0d', border: '1px solid #00d4ff20' }}>
+                  {Math.max(0, fakeBalance - capitalAtRisk).toFixed(3)} avail
+                </span>
+              )}
+              {capitalAtRisk > 0 && (
+                <span className="text-[9px] font-mono px-2 py-1 rounded-full"
+                  style={{ color: '#ffcc00', background: '#ffcc000d', border: '1px solid #ffcc0020' }}>
+                  {capitalAtRisk.toFixed(3)} at risk
+                </span>
+              )}
+              {allClosed.length > 0 && (
+                <span className="text-[9px] font-mono px-2 py-1 rounded-full"
+                  style={{ color: pnlColor, background: `${pnlColor}0d`, border: `1px solid ${pnlColor}20` }}>
+                  {winRate.toFixed(0)}% win rate
+                </span>
+              )}
             </div>
           </div>
-        </div>
 
-        <div className="p-4 space-y-4">
-
-          {/* ═══════════════════════════════════════════ OVERVIEW ════════ */}
-          {subTab === 'overview' && (
-            <>
-              {/* POSITIONS section */}
-              <div>
-                <p className="text-[10px] font-mono text-[#333333] uppercase tracking-widest mb-2 px-1">Positions</p>
-                <div className="bg-[#111] border border-[#1e1e1e] rounded-2xl overflow-hidden divide-y divide-[#1a1a1a]">
-                  {/* Paper Portfolio row */}
-                  <div className="px-4 py-3 flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center bg-[#1a1a1a] shrink-0 text-[16px]">
-                      ◎
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-bold text-[#e6e6e6]" style={{ fontFamily: "'Inter', sans-serif" }}>
-                        Paper Portfolio
-                      </p>
-                      <p className="text-[10px] font-mono text-[#444444]">{positions.length} trades</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-[13px] font-mono font-bold tabular-nums" style={{ color: pnlColor }}>
-                        {totalPnlSol >= 0 ? '+' : ''}{totalPnlSol.toFixed(4)} SOL
-                      </p>
-                      <p className="text-[10px] font-mono text-[#444444]">
-                        {totalPnlUsd >= 0 ? '+' : ''}${Math.abs(totalPnlUsd).toFixed(2)} USD
-                      </p>
-                    </div>
-                  </div>
-                  {/* Win Rate row */}
-                  <div className="px-4 py-3 flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-                      style={{ background: `${winRateColor}15` }}>
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: winRateColor }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-bold text-[#e6e6e6]" style={{ fontFamily: "'Inter', sans-serif" }}>
-                        Win Rate
-                      </p>
-                      <p className="text-[10px] font-mono text-[#444444]">
-                        {winners.length}W / {allClosed.length - winners.length}L
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-[13px] font-mono font-bold tabular-nums" style={{ color: winRateColor }}>
-                        {allClosed.length > 0 ? `${winRate.toFixed(1)}%` : '—'}
-                      </p>
-                    </div>
-                  </div>
-                  {/* Open Positions row */}
-                  <div className="px-4 py-3 flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-                      style={{ background: 'rgba(0,212,255,0.1)' }}>
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#00d4ff]" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-bold text-[#e6e6e6]" style={{ fontFamily: "'Inter', sans-serif" }}>
-                        Open Positions
-                      </p>
-                      <p className="text-[10px] font-mono text-[#444444]">
-                        {capitalAtRisk.toFixed(3)} SOL at risk
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-[13px] font-mono font-bold text-[#00d4ff] tabular-nums">
-                        {allOpen.length}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* STRATEGIES section */}
-              <div>
-                <p className="text-[10px] font-mono text-[#333333] uppercase tracking-widest mb-2 px-1">Strategies</p>
-                <div className="bg-[#111] border border-[#1e1e1e] rounded-2xl overflow-hidden">
-                  <div className="divide-y divide-[#1a1a1a]">
-                    {strategies.map(strategy => {
-                      const st = stats[strategy.id]
-                      if (!st) return null
-                      const wr = st.winRate
-                      const wrColor = wr >= 80 ? '#00ff88' : wr >= 60 ? '#ffcc00' : '#ff3355'
-                      const pnl = st.totalPnlSol
-                      const isBest = bestStrategy?.id === strategy.id && st.totalTrades > 0
-                      return (
-                        <div key={strategy.id} className="px-4 py-3 flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-                            style={{ background: `${strategy.color}18` }}>
-                            <span className="w-2.5 h-2.5 rounded-full" style={{ background: strategy.color }} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 mb-0.5">
-                              <span className="text-[12px] font-bold truncate" style={{ color: strategy.enabled ? '#e6e6e6' : '#444444', fontFamily: "'Inter', sans-serif" }}>
-                                {strategy.name}
-                              </span>
-                              {isBest && (
-                                <span className="text-[8px] font-mono px-1.5 rounded-full" style={{ color: '#ffd700', background: '#ffd70015' }}>
-                                  BEST
-                                </span>
-                              )}
-                            </div>
-                            <WinRateBar rate={wr} color={wrColor} />
-                            <div className="flex justify-between mt-0.5">
-                              <span className="text-[9px] font-mono" style={{ color: wrColor }}>
-                                {st.totalTrades > 0 ? `${wr.toFixed(0)}% WR` : '—'}
-                              </span>
-                              <span className="text-[9px] font-mono text-[#444444]">{st.totalTrades} trades</span>
-                            </div>
-                          </div>
-                          <div className="w-20 text-right shrink-0">
-                            <span className="text-[12px] font-mono tabular-nums font-bold" style={{ color: pnl >= 0 ? '#00ff88' : '#ff3355' }}>
-                              {pnl >= 0 ? '+' : ''}{pnl.toFixed(3)}
-                            </span>
-                            <p className="text-[9px] font-mono text-[#444444]">SOL</p>
-                          </div>
-                        </div>
-                      )
-                    })}
-                    {strategies.every(s => (stats[s.id]?.totalTrades ?? 0) === 0) && (
-                      <div className="px-4 py-8 text-center">
-                        <p className="text-[#333333] font-mono text-sm">Waiting for qualifying signals…</p>
-                        <p className="text-[#2a2a2a] font-mono text-[11px] mt-1">Enable a strategy to start tracking</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Recent closed trades */}
-              <div>
-                <div className="flex items-center justify-between mb-2 px-1">
-                  <p className="text-[10px] font-mono text-[#333333] uppercase tracking-widest">Recent Trades</p>
-                  {allClosed.length > 0 && (
-                    <button onClick={() => setSubTab('best')}
-                      className="text-[10px] font-mono text-[#444444] hover:text-[#888888] transition-colors cursor-pointer">
-                      See best →
-                    </button>
-                  )}
-                </div>
-                {allClosed.length === 0 ? (
-                  <div className="bg-[#111] border border-[#1e1e1e] rounded-2xl px-4 py-8 text-center">
-                    <p className="text-[#333333] font-mono text-sm">No closed trades yet</p>
-                  </div>
-                ) : (
-                  <div className="bg-[#111] border border-[#1e1e1e] rounded-2xl overflow-hidden divide-y divide-[#1a1a1a]">
-                    {[...allClosed]
-                      .sort((a, b) => new Date(b.exitTime ?? b.entryTime).getTime() - new Date(a.exitTime ?? a.entryTime).getTime())
-                      .slice(0, 10)
-                      .map(pos => {
-                        const pct = pnlPct(pos)
-                        const pnlC = pct >= 0 ? '#00ff88' : '#ff3355'
-                        const st = strategies.find(s => s.id === pos.strategyId)
-                        const status = STATUS_CFG[pos.status] ?? { label: pos.status, color: '#888888' }
-                        return (
-                          <div key={pos.id} className="px-4 py-3 flex items-center gap-3">
-                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded shrink-0"
-                              style={{ color: status.color, background: status.color + '15', border: `1px solid ${status.color}25` }}>
-                              {status.label}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[12px] font-mono text-[#e6e6e6] font-bold truncate">{pos.tokenSymbol}</span>
-                                {st && <span className="text-[9px] font-mono shrink-0" style={{ color: st.color }}>{st.name}</span>}
-                              </div>
-                              <p className="text-[10px] font-mono text-[#444444]">{holdTime(pos.entryTime, pos.exitTime)} hold</p>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className="text-[13px] font-mono font-bold tabular-nums" style={{ color: pnlC }}>
-                                {pct >= 0 ? '+' : ''}{pct.toFixed(0)}%
-                              </p>
-                              <p className="text-[10px] font-mono tabular-nums" style={{ color: pnlC }}>
-                                {pos.totalPnlSol >= 0 ? '+' : ''}{pos.totalPnlSol.toFixed(4)} SOL
-                              </p>
-                            </div>
-                          </div>
-                        )
-                      })}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {/* ═══════════════════════════════════════════ OPEN ════════════ */}
-          {subTab === 'open' && (
-            <>
-              {allOpen.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-3">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#333333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
-                  </svg>
-                  <p className="text-[#444444] font-mono text-sm">No open positions</p>
-                  <p className="text-[#2a2a2a] font-mono text-[11px]">Enable a strategy to start tracking</p>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#00d4ff08] border border-[#00d4ff20]">
-                    <span className="text-[11px] font-mono text-[#00d4ff]">{allOpen.length} open positions</span>
-                    <span className="text-[11px] font-mono text-[#00d4ff] tabular-nums">{capitalAtRisk.toFixed(3)} SOL at risk</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {allOpen.map(pos => (
-                      <OpenPositionCard key={pos.id} pos={pos} strategy={strategies.find(s => s.id === pos.strategyId)} />
-                    ))}
-                  </div>
-                </>
-              )}
-            </>
-          )}
-
-          {/* ═══════════════════════════════════════════ BEST TRADES ═════ */}
-          {subTab === 'best' && (
-            <>
-              {bestTrades.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-3">
-                  <span className="text-[48px]">🏆</span>
-                  <p className="text-[#444444] font-mono text-sm">No winning trades yet</p>
-                  <p className="text-[#2a2a2a] font-mono text-[11px]">Your hall of fame will appear here</p>
-                </div>
-              ) : (
-                <>
-                  <div className="text-center py-1">
-                    <p className="text-[10px] font-mono text-[#333333] uppercase tracking-widest">Hall of Fame · Top {bestTrades.length} Trades</p>
-                  </div>
-                  {bestTrades.slice(0, Math.min(3, bestTrades.length)).map((pos, i) => (
-                    <BestTradeCard key={pos.id} pos={pos} rank={i + 1} strategy={strategies.find(s => s.id === pos.strategyId)} />
-                  ))}
-                  {bestTrades.length > 3 && (
-                    <>
-                      <div className="flex items-center gap-3">
-                        <div className="h-px flex-1 bg-[#1a1a1a]" />
-                        <span className="text-[10px] font-mono text-[#333333] uppercase tracking-widest">More Winners</span>
-                        <div className="h-px flex-1 bg-[#1a1a1a]" />
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {bestTrades.slice(3).map((pos, i) => (
-                          <BestTradeCard key={pos.id} pos={pos} rank={i + 4} strategy={strategies.find(s => s.id === pos.strategyId)} />
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-            </>
-          )}
-
+          {/* Action buttons */}
+          <div className="flex justify-center gap-6 mt-6">
+            <ActionBtn
+              onClick={() => setShowDeposit(true)}
+              color="#7c3aed"
+              label="Deposit"
+              icon={
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2v16M5 9l7-7 7 7"/><path d="M5 22h14"/>
+                </svg>
+              }
+            />
+            <ActionBtn
+              onClick={() => setShowWithdraw(true)}
+              color="#ff3355"
+              label="Withdraw"
+              icon={
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22V6M5 15l7 7 7-7"/><path d="M5 2h14"/>
+                </svg>
+              }
+            />
+            <ActionBtn
+              onClick={() => {}}
+              color="#00d4ff"
+              label="Send"
+              icon={
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+              }
+            />
+            <ActionBtn
+              onClick={() => {}}
+              color="#00ff88"
+              label="Receive"
+              icon={
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/>
+                  <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/>
+                </svg>
+              }
+            />
+          </div>
         </div>
       </div>
+
+      {/* ── Sub-tab nav ───────────────────────────────────────────────────── */}
+      <div className="flex border-b border-[#1a1a1a] bg-[#080808] sticky top-0 z-10">
+        {([
+          { id: 'overview'  as const, label: 'Overview' },
+          { id: 'chart'     as const, label: 'Chart' },
+          { id: 'positions' as const, label: `Open${allOpen.length > 0 ? ` (${allOpen.length})` : ''}` },
+          { id: 'history'   as const, label: 'History' },
+        ] as const).map(t => (
+          <button
+            key={t.id}
+            onClick={() => setSubTab(t.id)}
+            className="flex-1 py-3 text-[10px] font-mono tracking-wider transition-all cursor-pointer border-b-2"
+            style={{
+              color: subTab === t.id ? '#e6e6e6' : '#444',
+              borderBottomColor: subTab === t.id ? '#7c3aed' : 'transparent',
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Tab content ──────────────────────────────────────────────────── */}
+      <div className="p-4 space-y-4">
+
+        {/* OVERVIEW */}
+        {subTab === 'overview' && (
+          <>
+            {/* Stats grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'Total Trades',   value: positions.length.toString(),       color: '#e6e6e6' },
+                { label: 'Win Rate',       value: allClosed.length > 0 ? `${winRate.toFixed(1)}%` : '—', color: winRate >= 60 ? '#00ff88' : '#ff3355' },
+                { label: 'Paper P&L',      value: `${totalPnlSol >= 0 ? '+' : ''}${fmtSol(totalPnlSol)} SOL`, color: pnlColor },
+                { label: 'Open',           value: allOpen.length.toString(),          color: allOpen.length > 0 ? '#00d4ff' : '#444' },
+              ].map(stat => (
+                <div key={stat.label} className="bg-[#111] border border-[#1a1a1a] rounded-2xl px-4 py-3">
+                  <p className="text-[9px] font-mono text-[#333] uppercase tracking-widest mb-1">{stat.label}</p>
+                  <p className="text-[18px] font-bold tabular-nums" style={{ color: stat.color, fontFamily: "'Inter', sans-serif" }}>
+                    {stat.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Allocation donut */}
+            <div className="bg-[#111] border border-[#1a1a1a] rounded-2xl p-4">
+              <p className="text-[10px] font-mono text-[#333] uppercase tracking-widest mb-4">Strategy Allocation</p>
+              <AllocationDonut strategies={strategies} stats={stats} />
+            </div>
+
+            {/* Recent transactions */}
+            <div className="bg-[#111] border border-[#1a1a1a] rounded-2xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a]">
+                <p className="text-[10px] font-mono text-[#333] uppercase tracking-widest">Recent</p>
+                <button onClick={() => setSubTab('history')}
+                  className="text-[10px] font-mono text-[#444] hover:text-[#777] transition-colors cursor-pointer">
+                  See all →
+                </button>
+              </div>
+              {recentTransactions.length === 0 ? (
+                <div className="py-10 text-center">
+                  <p className="text-[11px] font-mono text-[#2a2a2a]">No trades yet</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-[#111]">
+                  {recentTransactions.slice(0, 6).map(pos => (
+                    <TransactionRow key={pos.id} pos={pos}
+                      strategy={strategies.find(s => s.id === pos.strategyId)} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* CHART */}
+        {subTab === 'chart' && (
+          <PortfolioChart positions={positions} />
+        )}
+
+        {/* OPEN POSITIONS */}
+        {subTab === 'positions' && (
+          <>
+            {allOpen.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#222" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+                </svg>
+                <p className="text-[#333] font-mono text-sm">No open positions</p>
+              </div>
+            ) : (
+              <div className="bg-[#111] border border-[#1a1a1a] rounded-2xl overflow-hidden divide-y divide-[#111]">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a]">
+                  <p className="text-[10px] font-mono text-[#333] uppercase tracking-widest">{allOpen.length} open</p>
+                  <p className="text-[10px] font-mono text-[#444]">{capitalAtRisk.toFixed(3)} SOL at risk</p>
+                </div>
+                {allOpen.map(pos => (
+                  <TransactionRow key={pos.id} pos={pos}
+                    strategy={strategies.find(s => s.id === pos.strategyId)} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* HISTORY */}
+        {subTab === 'history' && (
+          <>
+            {allClosed.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#222" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <p className="text-[#333] font-mono text-sm">No closed trades yet</p>
+              </div>
+            ) : (
+              <div className="bg-[#111] border border-[#1a1a1a] rounded-2xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a]">
+                  <p className="text-[10px] font-mono text-[#333] uppercase tracking-widest">{allClosed.length} trades</p>
+                  <p className="text-[10px] font-mono" style={{ color: pnlColor }}>
+                    {totalPnlSol >= 0 ? '+' : ''}{fmtSol(totalPnlSol)} SOL total
+                  </p>
+                </div>
+                <div className="divide-y divide-[#111]">
+                  {[...allClosed]
+                    .sort((a, b) => new Date(b.exitTime ?? b.entryTime).getTime() - new Date(a.exitTime ?? a.entryTime).getTime())
+                    .map(pos => (
+                      <TransactionRow key={pos.id} pos={pos}
+                        strategy={strategies.find(s => s.id === pos.strategyId)} />
+                    ))
+                  }
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+      </div>
+
+      {/* ── Modals ───────────────────────────────────────────────────────── */}
+      {showDeposit && (
+        <DepositModal walletPk={walletPk} onClose={() => setShowDeposit(false)} />
+      )}
+      {showWithdraw && (
+        <WithdrawModal
+          onClose={() => setShowWithdraw(false)}
+          solBalance={displayBalance}
+          solPrice={solPrice}
+        />
+      )}
     </div>
   )
 }
