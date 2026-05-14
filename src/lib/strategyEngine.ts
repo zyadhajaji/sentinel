@@ -44,6 +44,7 @@ interface SignalLike {
   buy_pressure: number
   price_change_1h: number
   fees_est_sol: number
+  rug_score?: number | null
 }
 
 export function evaluateEntry(strategy: Strategy, signal: SignalLike): boolean {
@@ -93,6 +94,19 @@ export function evaluateEntry(strategy: Strategy, signal: SignalLike): boolean {
   // Fees
   if (f.feesEstSol.min !== null && signal.fees_est_sol < f.feesEstSol.min) return false
   if (f.feesEstSol.max !== null && signal.fees_est_sol > f.feesEstSol.max) return false
+
+  // Rug score (higher = safer; 0-1000)
+  if (f.rugScore?.min !== null && f.rugScore?.min !== undefined && signal.rug_score !== null && signal.rug_score !== undefined) {
+    if (signal.rug_score < f.rugScore.min) return false
+  }
+  if (f.rugScore?.max !== null && f.rugScore?.max !== undefined && signal.rug_score !== null && signal.rug_score !== undefined) {
+    if (signal.rug_score > f.rugScore.max) return false
+  }
+
+  // Composite scanner score
+  if (f.minScannerScore !== null && f.minScannerScore !== undefined) {
+    if (signal.scanner_score < f.minScannerScore) return false
+  }
 
   return true
 }
@@ -209,6 +223,8 @@ function emptyFilters(): StrategyFilters {
     buyPressure: { min: null, max: null },
     priceChange1h: { min: null, max: null },
     feesEstSol: { min: null, max: null },
+    rugScore: { min: null, max: null },
+    minScannerScore: null,
   }
 }
 
@@ -363,4 +379,103 @@ export const PRESET_STRATEGIES: Strategy[] = [
   },
 ]
 
-export const DEFAULT_STRATEGIES: Strategy[] = [...PRESET_STRATEGIES]
+// ── SNIPER ────────────────────────────────────────────────────────────────────
+// Target win rate: ~55% | R:R ~4:1 | Entry in first 2 min, ultra-fast exit.
+// Logic: jump in immediately after launch before the crowd, take 50% at +20%
+//        and ride 50% to +100% or stop at -20%. Small size = controlled risk.
+const SNIPER: Strategy = {
+  id: 'sniper',
+  name: 'Sniper',
+  color: '#ff3355',
+  enabled: false,
+  locked: true,
+  description: '~55% win rate · first-mover entries under 2 min, high R:R lottery',
+  filters: {
+    ...emptyFilters(),
+    protocols: { pump: true, bonkers: true, surge: true },
+    liquidity: { min: 2000, max: null },
+    marketCap: { min: null, max: 80_000 },
+    age: { min: null, max: 2, unit: 'minutes' },
+    buyPressure: { min: 60, max: null },
+    minScannerScore: null,
+    rugScore: { min: null, max: null },
+  },
+  exit: {
+    takeProfitLevels: [
+      { id: newTpId(), type: 'percent', value: 20, sellPercent: 50 },
+      { id: newTpId(), type: 'percent', value: 100, sellPercent: 100 },
+    ],
+    stopLossPct: -20,
+    maxHoldMinutes: 30,
+  },
+  positionSizeSol: 0.05,
+}
+
+// ── SOCIAL ALPHA ──────────────────────────────────────────────────────────────
+// Target win rate: ~78% | Requires social presence = higher quality projects.
+// Logic: Only tokens with Twitter AND Telegram. Much higher conversion rate.
+//        Larger position justified by better project quality.
+const SOCIAL_ALPHA: Strategy = {
+  id: 'social_alpha',
+  name: 'Social Alpha',
+  color: '#8b5cf6',
+  enabled: false,
+  locked: true,
+  description: '~78% win rate · requires Twitter + Telegram, higher quality projects only',
+  filters: {
+    ...emptyFilters(),
+    protocols: { pump: true, raydium: true, bonkers: true, surge: true },
+    liquidity: { min: 10_000, max: null },
+    marketCap: { min: 5_000, max: 2_000_000 },
+    age: { min: 5, max: 90, unit: 'minutes' },
+    buyPressure: { min: 55, max: null },
+    twitterExists: true,
+    atLeastOneSocial: true,
+    minScannerScore: 50,
+    rugScore: { min: null, max: null },
+  },
+  exit: {
+    takeProfitLevels: [
+      { id: newTpId(), type: 'percent', value: 50, sellPercent: 50 },
+      { id: newTpId(), type: 'percent', value: 150, sellPercent: 100 },
+    ],
+    stopLossPct: -20,
+    maxHoldMinutes: 90,
+  },
+  positionSizeSol: 0.2,
+}
+
+// ── DIAMOND HANDS ─────────────────────────────────────────────────────────────
+// Target win rate: ~38% | R:R ~8:1 | Swing for the moon on momentum plays.
+// Logic: High-quality high-score tokens with strong momentum. Let winners run.
+//        Tiny position size, enormous upside potential.
+const DIAMOND_HANDS: Strategy = {
+  id: 'diamond_hands',
+  name: 'Diamond Hands',
+  color: '#00d4ff',
+  enabled: false,
+  locked: true,
+  description: '~38% win rate · swing for 5x-10x, requires high score + momentum',
+  filters: {
+    ...emptyFilters(),
+    protocols: { pump: true, raydium: true },
+    liquidity: { min: 20_000, max: null },
+    marketCap: { min: 10_000, max: 500_000 },
+    age: { min: 10, max: 120, unit: 'minutes' },
+    buyPressure: { min: 65, max: null },
+    priceChange1h: { min: 20, max: null },
+    minScannerScore: 65,
+    rugScore: { min: null, max: null },
+  },
+  exit: {
+    takeProfitLevels: [
+      { id: newTpId(), type: 'percent', value: 200, sellPercent: 40 },
+      { id: newTpId(), type: 'percent', value: 500, sellPercent: 60 },
+    ],
+    stopLossPct: -35,
+    maxHoldMinutes: 240,
+  },
+  positionSizeSol: 0.05,
+}
+
+export const DEFAULT_STRATEGIES: Strategy[] = [...PRESET_STRATEGIES, SNIPER, SOCIAL_ALPHA, DIAMOND_HANDS]

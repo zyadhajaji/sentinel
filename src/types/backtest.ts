@@ -39,6 +39,8 @@ export interface StrategyFilters {
   buyPressure: RangeFilter
   priceChange1h: RangeFilter
   feesEstSol: RangeFilter
+  rugScore: RangeFilter
+  minScannerScore: number | null
 }
 
 export interface TakeProfitLevel {

@@ -3,6 +3,7 @@ import type { Signal } from './types'
 import { Header } from './components/Header'
 import { SignalFeed } from './components/SignalFeed'
 import { TradePanel } from './components/TradePanel'
+import { TokenDetailModal } from './components/TokenDetailModal'
 import { BacktestPage } from './components/backtest/BacktestPage'
 import { PortfolioDashboard } from './components/portfolio/PortfolioDashboard'
 import { useSignalFeed } from './hooks/useSignalFeed'
@@ -20,6 +21,7 @@ export default function App() {
     updateStrategy, toggleAutoTrade, addStrategy, deleteStrategy, clearPositions,
   } = useBacktest(signals)
   const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null)
+  const [detailSignal, setDetailSignal] = useState<Signal | null>(null)
   const [tab, setTab] = useState<Tab>('terminal')
 
   const openCount = positions.filter(p => p.status === 'open').length
@@ -63,6 +65,7 @@ export default function App() {
                 signals={signals}
                 newSignalId={newSignalId}
                 onTrade={setSelectedSignal}
+                onDetail={setDetailSignal}
                 alertSettings={alertSettings}
                 onAlertSettingsChange={setAlertSettings}
                 watchedCAs={watchedCAs}
@@ -108,6 +111,10 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {detailSignal && (
+        <TokenDetailModal signal={detailSignal} onClose={() => setDetailSignal(null)} />
+      )}
 
       {/* Mobile bottom nav */}
       <div className="fixed bottom-0 left-0 right-0 md:hidden bg-[#080808]/95 backdrop-blur-sm border-t border-[#1a1a1a] z-50 bottom-nav">

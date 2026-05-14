@@ -10,6 +10,7 @@ interface Props {
   signals: Signal[]
   newSignalId: string | null
   onTrade: (signal: Signal) => void
+  onDetail: (signal: Signal) => void
   alertSettings: AlertSettings
   onAlertSettingsChange: (s: AlertSettings) => void
   watchedCAs: string[]
@@ -126,7 +127,7 @@ function AlertPanel({ settings, onChange }: { settings: AlertSettings; onChange:
   )
 }
 
-export function SignalFeed({ signals, newSignalId, onTrade, alertSettings, onAlertSettingsChange, watchedCAs }: Props) {
+export function SignalFeed({ signals, newSignalId, onTrade, onDetail, alertSettings, onAlertSettingsChange, watchedCAs }: Props) {
   const [filter, setFilter] = useState<GradeFilter>(() => loadStorage<GradeFilter>('sentinel_filter', 'ALL'))
   const [showAlerts, setShowAlerts] = useState(false)
   const { watchlist } = useWatchlist()
@@ -213,6 +214,7 @@ export function SignalFeed({ signals, newSignalId, onTrade, alertSettings, onAle
               signal={signal}
               isNew={signal.id === newSignalId}
               onTrade={onTrade}
+              onDetail={onDetail}
             />
           ))}
           {filtered.length === 0 && (

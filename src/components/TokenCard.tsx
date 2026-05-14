@@ -10,6 +10,7 @@ interface Props {
   signal: Signal
   isNew?: boolean
   onTrade: (signal: Signal) => void
+  onDetail?: (signal: Signal) => void
 }
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -133,7 +134,7 @@ function StarIcon({ filled }: { filled: boolean }) {
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
-export function TokenCard({ signal, isNew, onTrade }: Props) {
+export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
   const [showBreakdown, setShowBreakdown] = useState(false)
   const [copied, setCopied] = useState(false)
   const { watchlist, toggle } = useWatchlist()
@@ -158,8 +159,10 @@ export function TokenCard({ signal, isNew, onTrade }: Props) {
         'bg-[#111111] border rounded-xl overflow-hidden transition-all duration-200',
         isNew
           ? 'border-[#00ff88] shadow-[0_0_28px_rgba(0,255,136,0.10)] animate-slide-up'
-          : 'border-[#1a1a1a] hover:border-[#252525]'
+          : 'border-[#1a1a1a] hover:border-[#252525]',
+        onDetail ? 'cursor-pointer' : ''
       )}
+      onClick={() => onDetail?.(signal)}
     >
       {/* Launch banner — shown when very fresh */}
       {signal.contract_age_minutes <= 3 && (
@@ -232,7 +235,7 @@ export function TokenCard({ signal, isNew, onTrade }: Props) {
               {/* Launch time + CA + seen */}
               <div className="flex items-center gap-1.5 flex-wrap">
                 <button
-                  onClick={copyCA}
+                  onClick={(e) => { e.stopPropagation(); copyCA() }}
                   className="text-[11px] font-mono transition-colors min-h-[20px] cursor-pointer"
                   style={{ color: copied ? '#00ff88' : '#444444' }}
                   title="Copy contract address"
@@ -255,7 +258,7 @@ export function TokenCard({ signal, isNew, onTrade }: Props) {
           {/* Action buttons */}
           <div className="flex items-center gap-1.5 shrink-0">
             <button
-              onClick={(e) => { e.stopPropagation(); toggle(signal.ca) }}
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); toggle(signal.ca) }}
               className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded border transition-all cursor-pointer"
               style={isWatched
                 ? { borderColor: '#ffcc0035', background: '#ffcc0010' }
@@ -407,7 +410,7 @@ export function TokenCard({ signal, isNew, onTrade }: Props) {
             )}
           </div>
           <button
-            onClick={() => setShowBreakdown(v => !v)}
+            onClick={(e) => { e.stopPropagation(); setShowBreakdown(v => !v) }}
             className="text-[10px] text-[#444444] hover:text-[#777777] font-mono transition-colors min-h-[36px] px-1 shrink-0 flex items-center gap-1 cursor-pointer"
           >
             <svg
