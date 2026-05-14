@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="32" fill="#0a0a0a"/>
+  <rect width="192" height="192" rx="32" fill="url(#g)" opacity="0.15"/>
+  <defs>
+    <radialGradient id="g" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#00d4ff"/>
+      <stop offset="100%" stop-color="#0a0a0a"/>
+    </radialGradient>
+  </defs>
+  <!-- Octagon/scanner ring -->
+  <polygon points="96,28 140,52 164,96 140,140 96,164 52,140 28,96 52,52"
+    fill="none" stroke="#00d4ff" stroke-width="4" opacity="0.6"/>
+  <!-- S lettermark -->
+  <text x="96" y="118" font-size="72" text-anchor="middle" fill="#00d4ff"
+    font-family="'Courier New', monospace" font-weight="700" letter-spacing="-2">S</text>
+</svg>

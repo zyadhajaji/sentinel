@@ -25,7 +25,6 @@ function playBeep(freq: number, duration: number, vol: number) {
 }
 
 export function playSafeAlert() {
-  // Two-tone ascending chime
   playBeep(880, 0.12, 0.15)
   setTimeout(() => playBeep(1320, 0.2, 0.12), 100)
 }
@@ -40,11 +39,40 @@ export function vibrateAlert(grade: 'SAFE' | 'WATCH' | 'RISK') {
   else if (grade === 'WATCH') navigator.vibrate([20])
 }
 
+export async function requestNotificationPermission(): Promise<boolean> {
+  if (!('Notification' in window)) return false
+  if (Notification.permission === 'granted') return true
+  const perm = await Notification.requestPermission()
+  return perm === 'granted'
+}
+
+function sendBrowserNotification(signal: Signal) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return
+  // Only fire when page is hidden (backgrounded) — avoids double-alerting
+  if (!document.hidden) return
+
+  const gradeEmoji = signal.score_grade === 'SAFE' ? '🟢' : signal.score_grade === 'WATCH' ? '🟡' : '🔴'
+  const mcap = signal.mcap_usd >= 1_000_000
+    ? `$${(signal.mcap_usd / 1_000_000).toFixed(1)}M`
+    : signal.mcap_usd >= 1_000
+      ? `$${(signal.mcap_usd / 1_000).toFixed(0)}K`
+      : `$${signal.mcap_usd.toFixed(0)}`
+
+  try {
+    new Notification(`${gradeEmoji} ${signal.token_symbol} · Score ${signal.scanner_score}`, {
+      body: `${mcap} mcap · ${signal.source} · ${signal.narrative_tags[0] ?? ''}`,
+      tag: signal.ca,   // deduplicates if same token fires twice
+      silent: true,     // Web Audio already played a chime
+    })
+  } catch {}
+}
+
 export interface AlertSettings {
   safeEnabled: boolean
   watchEnabled: boolean
   soundEnabled: boolean
   vibrationEnabled: boolean
+  browserNotifEnabled: boolean
   minScore: number
 }
 
@@ -53,6 +81,7 @@ export const DEFAULT_ALERT_SETTINGS: AlertSettings = {
   watchEnabled: false,
   soundEnabled: true,
   vibrationEnabled: true,
+  browserNotifEnabled: false,
   minScore: 60,
 }
 
@@ -71,5 +100,9 @@ export function triggerAlert(signal: Signal, settings: AlertSettings) {
 
   if (settings.vibrationEnabled) {
     vibrateAlert(signal.score_grade)
+  }
+
+  if (settings.browserNotifEnabled) {
+    sendBrowserNotification(signal)
   }
 }

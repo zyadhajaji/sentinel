@@ -3,6 +3,7 @@ import type { Signal } from '../types'
 import { ScoreRing } from './ScoreRing'
 import { ScoreBreakdownPanel } from './ScoreBreakdownPanel'
 import { formatUSD, shortCA, timeAgo } from '../lib/mockData'
+import { useWatchlist } from '../contexts/WatchlistContext'
 import clsx from 'clsx'
 
 interface Props {
@@ -41,6 +42,8 @@ function rugLabel(score: number | null): { text: string; color: string } | null 
 export function TokenCard({ signal, isNew, onTrade }: Props) {
   const [showBreakdown, setShowBreakdown] = useState(false)
   const [copied, setCopied] = useState(false)
+  const { watchlist, toggle } = useWatchlist()
+  const isWatched = watchlist.has(signal.ca)
 
   const priceChangeColor = signal.price_change_1h >= 0 ? '#00ff88' : '#ff3355'
   const priceChangeSign = signal.price_change_1h >= 0 ? '+' : ''
@@ -127,6 +130,17 @@ export function TokenCard({ signal, isNew, onTrade }: Props) {
 
         {/* Action buttons */}
         <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={(e) => { e.stopPropagation(); toggle(signal.ca) }}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[16px] rounded border transition-all"
+            style={isWatched
+              ? { borderColor: '#ffcc0040', color: '#ffcc00', background: '#ffcc0010' }
+              : { borderColor: '#1e1e1e', color: '#444444' }
+            }
+            title={isWatched ? 'Remove from watchlist' : 'Add to watchlist'}
+          >
+            {isWatched ? '★' : '☆'}
+          </button>
           <button
             onClick={(e) => { e.stopPropagation(); onTrade(signal) }}
             className="min-h-[44px] px-3 text-[11px] font-mono font-bold rounded border border-[#00d4ff30] text-[#00d4ff] bg-[#00d4ff08] hover:bg-[#00d4ff18] active:bg-[#00d4ff25] transition-all"

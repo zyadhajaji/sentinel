@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import type { Signal } from '../types'
 import type { AlertSettings } from '../lib/alertEngine'
+import { requestNotificationPermission } from '../lib/alertEngine'
 import { TokenCard } from './TokenCard'
+import { useWatchlist } from '../contexts/WatchlistContext'
+import { loadStorage, saveStorage } from '../lib/storage'
 
 interface Props {
   signals: Signal[]
@@ -11,17 +14,28 @@ interface Props {
   onAlertSettingsChange: (s: AlertSettings) => void
 }
 
-const GRADE_FILTER_OPTIONS = ['ALL', 'SAFE', 'WATCH', 'RISK'] as const
+const GRADE_FILTER_OPTIONS = ['ALL', 'SAFE', 'WATCH', 'RISK', 'STARRED'] as const
 type GradeFilter = typeof GRADE_FILTER_OPTIONS[number]
 
 const GRADE_COLORS: Record<string, string> = {
   SAFE: '#00ff88',
   WATCH: '#ffcc00',
   RISK: '#ff3355',
+  STARRED: '#ffcc00',
 }
 
 function AlertPanel({ settings, onChange }: { settings: AlertSettings; onChange: (s: AlertSettings) => void }) {
   const set = (patch: Partial<AlertSettings>) => onChange({ ...settings, ...patch })
+
+  async function handleNotifToggle() {
+    if (settings.browserNotifEnabled) {
+      set({ browserNotifEnabled: false })
+      return
+    }
+    const granted = await requestNotificationPermission()
+    set({ browserNotifEnabled: granted })
+  }
+
   return (
     <div className="border-t border-[#1e1e1e] bg-[#0d0d0d] px-4 py-3 space-y-3 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -56,6 +70,14 @@ function AlertPanel({ settings, onChange }: { settings: AlertSettings; onChange:
           <span style={{ color: '#ffcc00' }}>●</span>
           <span>WATCH signals</span>
         </button>
+        <button onClick={handleNotifToggle}
+          className={`col-span-2 flex items-center gap-2 px-3 py-2.5 rounded border text-[11px] font-mono min-h-[44px] transition-all ${
+            settings.browserNotifEnabled ? 'border-[#00d4ff40] text-[#00d4ff] bg-[#00d4ff08]' : 'border-[#1e1e1e] text-[#555555]'
+          }`}>
+          <span>🔔</span>
+          <span>Browser notifications</span>
+          <span className="ml-auto text-[10px] opacity-50">{settings.browserNotifEnabled ? 'ON' : 'OFF'}</span>
+        </button>
       </div>
       <div className="flex items-center gap-3">
         <span className="text-[11px] font-mono text-[#555555]">Min score</span>
@@ -72,17 +94,26 @@ function AlertPanel({ settings, onChange }: { settings: AlertSettings; onChange:
 }
 
 export function SignalFeed({ signals, newSignalId, onTrade, alertSettings, onAlertSettingsChange }: Props) {
-  const [filter, setFilter] = useState<GradeFilter>('ALL')
+  const [filter, setFilter] = useState<GradeFilter>(() => loadStorage<GradeFilter>('sentinel_filter', 'ALL'))
   const [showAlerts, setShowAlerts] = useState(false)
+  const { watchlist } = useWatchlist()
+
+  function handleFilterChange(f: GradeFilter) {
+    setFilter(f)
+    saveStorage('sentinel_filter', f)
+  }
 
   const filtered = filter === 'ALL'
     ? signals
-    : signals.filter(s => s.score_grade === filter)
+    : filter === 'STARRED'
+      ? signals.filter(s => watchlist.has(s.ca))
+      : signals.filter(s => s.score_grade === filter)
 
   const counts = {
     SAFE: signals.filter(s => s.score_grade === 'SAFE').length,
     WATCH: signals.filter(s => s.score_grade === 'WATCH').length,
     RISK: signals.filter(s => s.score_grade === 'RISK').length,
+    STARRED: watchlist.size,
   }
 
   const alertsOn = alertSettings.soundEnabled || alertSettings.vibrationEnabled
@@ -98,13 +129,10 @@ export function SignalFeed({ signals, newSignalId, onTrade, alertSettings, onAle
           <span className="text-[11px] font-mono text-[#555555]">{signals.length} signals</span>
         </div>
         <div className="flex items-center gap-1">
-          {/* Alert bell */}
           <button
             onClick={() => setShowAlerts(v => !v)}
             className={`text-[13px] min-h-[36px] min-w-[36px] flex items-center justify-center rounded border transition-all mr-1 ${
-              showAlerts
-                ? 'border-[#2a2a2a] bg-[#141414]'
-                : 'border-transparent'
+              showAlerts ? 'border-[#2a2a2a] bg-[#141414]' : 'border-transparent'
             } ${alertsOn ? 'text-[#00d4ff]' : 'text-[#444444]'}`}
             title="Alert settings"
           >
@@ -113,7 +141,7 @@ export function SignalFeed({ signals, newSignalId, onTrade, alertSettings, onAle
           {GRADE_FILTER_OPTIONS.map(opt => (
             <button
               key={opt}
-              onClick={() => setFilter(opt)}
+              onClick={() => handleFilterChange(opt)}
               className={`text-[11px] font-mono px-2.5 py-1.5 rounded min-h-[36px] transition-all ${
                 filter === opt
                   ? 'bg-[#141414] text-[#e6e6e6] border border-[#2a2a2a]'
@@ -121,7 +149,7 @@ export function SignalFeed({ signals, newSignalId, onTrade, alertSettings, onAle
               }`}
               style={filter === opt && opt !== 'ALL' ? { color: GRADE_COLORS[opt] } : undefined}
             >
-              {opt}
+              {opt === 'STARRED' ? '★' : opt}
               {opt !== 'ALL' && counts[opt as keyof typeof counts] > 0 && (
                 <span className="ml-1 opacity-60">{counts[opt as keyof typeof counts]}</span>
               )}
@@ -148,8 +176,10 @@ export function SignalFeed({ signals, newSignalId, onTrade, alertSettings, onAle
           ))}
           {filtered.length === 0 && (
             <div className="flex flex-col items-center justify-center h-40 gap-2">
-              <span className="text-[#333333] text-2xl">◈</span>
-              <span className="text-[#444444] text-sm font-mono">No {filter} signals yet</span>
+              <span className="text-[#333333] text-2xl">{filter === 'STARRED' ? '★' : '◈'}</span>
+              <span className="text-[#444444] text-sm font-mono">
+                {filter === 'STARRED' ? 'No starred tokens yet' : `No ${filter} signals yet`}
+              </span>
             </div>
           )}
         </div>
