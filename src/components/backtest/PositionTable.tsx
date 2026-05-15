@@ -76,10 +76,36 @@ export function PositionTable({ positions, strategies, filter }: Props) {
                     )}
                   </div>
                   {/* Strategy shown inline on mobile */}
-                  <div className="sm:hidden text-[10px] mt-0.5" style={{ color: stratColor }}>{pos.strategyName}</div>
+                  <div className="sm:hidden flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[10px]" style={{ color: stratColor }}>{pos.strategyName}</span>
+                    {pos.mode === 'live' ? (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border"
+                        style={{ color: '#00ff88', borderColor: '#00ff8840', background: '#00ff8810', boxShadow: '0 0 4px #00ff8830' }}>
+                        LIVE
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border"
+                        style={{ color: '#666666', borderColor: '#2a2a2a', background: '#1a1a1a' }}>
+                        PAPER
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="py-2.5 pr-3 hidden sm:table-cell">
-                  <span style={{ color: stratColor }}>{pos.strategyName}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span style={{ color: stratColor }}>{pos.strategyName}</span>
+                    {pos.mode === 'live' ? (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border"
+                        style={{ color: '#00ff88', borderColor: '#00ff8840', background: '#00ff8810', boxShadow: '0 0 4px #00ff8830' }}>
+                        LIVE
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border"
+                        style={{ color: '#666666', borderColor: '#2a2a2a', background: '#1a1a1a' }}>
+                        PAPER
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="py-2.5 pr-3 text-right text-[#555555] hidden sm:table-cell">
                   ${pos.entryPrice < 0.0001 ? pos.entryPrice.toExponential(2) : pos.entryPrice.toFixed(6)}

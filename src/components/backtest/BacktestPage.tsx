@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { Signal } from '../../types'
 import type { Strategy, StrategyStats, Position } from '../../types/backtest'
 import type { BotActivity } from '../../hooks/useBacktest'
@@ -41,12 +41,40 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(secs / 3600)}h ago`
 }
 
-function BotStatusBar({ botActivity, openCount, totalPnl, totalTrades }: {
-  botActivity: BotActivity; openCount: number; totalPnl: number; totalTrades: number
+function BotStatusBar({ botActivity, openCount, totalPnl, totalTrades, positions }: {
+  botActivity: BotActivity; openCount: number; totalPnl: number; totalTrades: number; positions: Position[]
 }) {
   const pnlColor = totalPnl >= 0 ? '#00ff88' : '#ff3355'
+
+  // Live "last scan Xs ago" counter
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const lastScanLabel = botActivity.lastTickTime == null
+    ? 'scanning...'
+    : `last scan ${timeAgo(botActivity.lastTickTime)}`
+
+  // Win Rate & Best across all closed positions
+  const closedPositions = positions.filter(p => p.status !== 'open')
+  const wins = closedPositions.filter(p => p.totalPnlSol > 0).length
+  const winRate = closedPositions.length > 0 ? (wins / closedPositions.length) * 100 : null
+  const bestPnl = closedPositions.length > 0 ? Math.max(...closedPositions.map(p => p.totalPnlSol)) : null
+
   return (
     <div className="shrink-0 bg-[#0a0a0a] border-b border-[#1a1a1a]">
+      {/* ANAKIN ONLINE row */}
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-[#141414]">
+        <div className="w-1.5 h-1.5 rounded-full shrink-0"
+          style={{ background: '#ffd700', animation: 'pulse 2s ease-in-out infinite', boxShadow: '0 0 6px #ffd70080' }} />
+        <span className="text-[#ffd700] font-bold font-mono text-[11px] tracking-widest">ANAKIN</span>
+        <span className="text-[#00ff88] font-mono text-[11px] font-bold tracking-wider">ONLINE</span>
+        <span className="text-[#555555] font-mono text-[11px]">· 24/7 SCANNING</span>
+        <span className="text-[#444444] font-mono text-[11px] ml-1">{lastScanLabel}</span>
+      </div>
+      {/* Stats strip */}
       <div className="flex items-center gap-0 divide-x divide-[#1a1a1a] text-[11px] font-mono overflow-x-auto">
         {/* Bot status */}
         <div className="flex items-center gap-2 px-4 py-3 shrink-0">
@@ -77,6 +105,20 @@ function BotStatusBar({ botActivity, openCount, totalPnl, totalTrades }: {
         <div className="flex items-center gap-2 px-4 py-3 shrink-0">
           <span className="text-[#555555]">Last trade</span>
           <span className="text-[#888888]">{timeAgo(botActivity.lastTradeTime)}</span>
+        </div>
+        {/* Win Rate */}
+        <div className="flex items-center gap-2 px-4 py-3 shrink-0">
+          <span className="text-[#555555]">Win Rate</span>
+          <span className="font-bold tabular-nums" style={{ color: winRate == null ? '#444444' : winRate >= 50 ? '#00ff88' : '#ff3355' }}>
+            {winRate == null ? '—' : `${winRate.toFixed(0)}%`}
+          </span>
+        </div>
+        {/* Best */}
+        <div className="flex items-center gap-2 px-4 py-3 shrink-0">
+          <span className="text-[#555555]">Best</span>
+          <span className="font-bold tabular-nums" style={{ color: bestPnl == null || bestPnl <= 0 ? '#444444' : '#00ff88' }}>
+            {bestPnl == null ? '—' : `${bestPnl >= 0 ? '+' : ''}${bestPnl.toFixed(3)} SOL`}
+          </span>
         </div>
         {/* Price tick */}
         <div className="flex items-center gap-1.5 px-4 py-3 ml-auto shrink-0">
@@ -139,7 +181,7 @@ export function BacktestPage({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <BotStatusBar botActivity={botActivity} openCount={openCount} totalPnl={totalPnl} totalTrades={totalTrades} />
+      <BotStatusBar botActivity={botActivity} openCount={openCount} totalPnl={totalPnl} totalTrades={totalTrades} positions={positions} />
 
       <div className="flex-1 overflow-y-auto overscroll-contain">
         {/* Page header */}

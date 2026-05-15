@@ -60,6 +60,7 @@ export function generateSignal(): Signal {
     source: SOURCES[randomInt(0, SOURCES.length)],
     liquidity_usd: liquidity,
     mcap_usd: mcap,
+    entry_mcap_usd: mcap,
     holders: randomInt(50, 3000),
     top_holder_pct: randomBetween(3, 35),
     mint_authority_revoked: Math.random() > 0.3 as boolean | null,

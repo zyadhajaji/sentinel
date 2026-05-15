@@ -12,6 +12,7 @@ export interface Signal {
   source: SignalSource
   liquidity_usd: number
   mcap_usd: number
+  entry_mcap_usd: number   // MC at the moment the signal was first detected — never updated
   holders: number | null
   top_holder_pct: number | null
   mint_authority_revoked: boolean | null

@@ -133,6 +133,18 @@ export function StrategyCard({ strategy, stats, onToggle, onEdit, onToggleAutoTr
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {/* PAPER / LIVE badge */}
+          {strategy.autoTrade ? (
+            <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border"
+              style={{ color: '#00ff88', borderColor: '#00ff8840', background: '#00ff8810', boxShadow: '0 0 4px #00ff8830' }}>
+              LIVE
+            </span>
+          ) : (
+            <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border"
+              style={{ color: '#666666', borderColor: '#2a2a2a', background: '#1a1a1a' }}>
+              PAPER
+            </span>
+          )}
           {!strategy.locked && (
             <button onClick={() => onEdit(strategy.id)}
               className="min-h-[32px] px-2 text-[10px] font-mono rounded border border-[#1e1e1e] text-[#555555] hover:text-[#888888] hover:border-[#2a2a2a] transition-all cursor-pointer">

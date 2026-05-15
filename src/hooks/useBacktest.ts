@@ -32,6 +32,8 @@ function mergeStrategies(saved: Strategy[]): Strategy[] {
   return result
 }
 
+// When maxCapital is set (fake balance), all positions are paper trades.
+// When autoTrade is enabled and no fake balance, they're "live" (wallet-backed).
 export function useBacktest(signals: Signal[], maxCapital?: number) {
   const [strategies, setStrategies] = useState<Strategy[]>(() =>
     mergeStrategies(loadStorage<Strategy[]>(storageKey('sentinel_strategies'), []))
@@ -102,6 +104,8 @@ export function useBacktest(signals: Signal[], maxCapital?: number) {
         source: latest.source,
         liquidityAtEntry: latest.liquidity_usd,
         dexUrl: latest.dex_url,
+        // paper = fake balance set OR autoTrade not enabled; live = real wallet funds
+        mode: (maxCapital !== undefined || !strategy.autoTrade) ? 'paper' : 'live',
       })
     }
 

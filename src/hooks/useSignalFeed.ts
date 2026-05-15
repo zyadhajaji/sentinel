@@ -84,6 +84,7 @@ function pairToSignal(pair: DexPair, profile?: TokenProfile, solPrice = 150): Si
     source,
     liquidity_usd: liquidity,
     mcap_usd: pair.marketCap ?? pair.fdv ?? 0,
+    entry_mcap_usd: pair.marketCap ?? pair.fdv ?? 0,
     holders: null,
     top_holder_pct: null,
     mint_authority_revoked: source === 'pumpfun' ? true : null,
@@ -133,6 +134,7 @@ function pumpFunToSignal(token: PumpFunToken, solPrice = 150): Signal {
     source: 'pumpfun',
     liquidity_usd: liquidityUsd,
     mcap_usd: mcapSolUsd,
+    entry_mcap_usd: mcapSolUsd,
     holders: null,
     top_holder_pct: null,
     mint_authority_revoked: true,
@@ -216,7 +218,7 @@ export function useSignalFeed() {
           ? { ...enriched, rug_score: rug.score, rug_risks: rug.risks, top_holder_pct: rug.topHolderPct }
           : enriched
 
-        setSignals(prev => prev.map(s => s.ca === token.mint ? { ...withRug, id: s.id } : s))
+        setSignals(prev => prev.map(s => s.ca === token.mint ? { ...withRug, id: s.id, entry_mcap_usd: s.entry_mcap_usd } : s))
       }, 45_000)
     })
 
@@ -259,7 +261,7 @@ export function useSignalFeed() {
           // Preserve rug data and original id from existing signal
           setSignals(prev => prev.map(p =>
             p.ca === s.ca
-              ? { ...enriched, id: p.id, rug_score: p.rug_score, rug_risks: p.rug_risks, top_holder_pct: p.top_holder_pct }
+              ? { ...enriched, id: p.id, entry_mcap_usd: p.entry_mcap_usd, rug_score: p.rug_score, rug_risks: p.rug_risks, top_holder_pct: p.top_holder_pct }
               : p
           ))
           await new Promise(r => setTimeout(r, REFRESH_DELAY_MS))

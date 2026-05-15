@@ -23,6 +23,12 @@ function fmtSOL(n: number): string {
   return n >= 1 ? `${n.toFixed(2)}◎` : `${n.toFixed(3)}◎`
 }
 
+function fmtMc(usd: number): string {
+  if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(1)}M`
+  if (usd >= 1_000) return `$${(usd / 1_000).toFixed(0)}K`
+  return `$${usd.toFixed(0)}`
+}
+
 function ageLabel(m: number): string {
   if (m < 1) return '<1m'
   if (m < 60) return `${m}m`
@@ -422,10 +428,32 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
               <span style={{ color: '#333' }}>V </span>
               <span style={{ color: '#ffcc00' }}>{fmt(signal.volume_1h)}</span>
             </span>
-            <span className="text-[10px] font-mono">
-              <span style={{ color: '#333' }}>MC </span>
-              <span style={{ color: pxColor }}>{fmt(signal.mcap_usd)}</span>
-            </span>
+            {(() => {
+              const entryMc = signal.entry_mcap_usd
+              const liveMc = signal.mcap_usd
+              const hasEntry = typeof entryMc === 'number' && entryMc > 0
+              const changed = hasEntry && entryMc !== liveMc
+              const changePct = changed ? ((liveMc - entryMc) / entryMc) * 100 : 0
+              const showChange = changed && Math.abs(changePct) > 1
+              if (showChange) {
+                const changeColor = changePct >= 0 ? '#00ff88' : '#ff3355'
+                const sign = changePct >= 0 ? '+' : ''
+                return (
+                  <span className="text-[10px] font-mono flex items-center gap-0.5">
+                    <span style={{ color: '#555' }}>CALLED {fmtMc(entryMc)}</span>
+                    <span style={{ color: '#444' }}> → </span>
+                    <span style={{ color: '#e6e6e6' }}>LIVE {fmtMc(liveMc)}</span>
+                    <span style={{ color: changeColor }}> ({sign}{changePct.toFixed(0)}%)</span>
+                  </span>
+                )
+              }
+              return (
+                <span className="text-[10px] font-mono">
+                  <span style={{ color: '#333' }}>MC </span>
+                  <span style={{ color: pxColor }}>{fmt(liveMc)}</span>
+                </span>
+              )
+            })()}
           </div>
           {/* Line 2: F · L */}
           <div className="flex gap-3">

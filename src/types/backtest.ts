@@ -109,6 +109,7 @@ export interface Position {
   source: string
   liquidityAtEntry: number
   dexUrl: string | null
+  mode: 'paper' | 'live'   // paper = fake balance or no autoTrade; live = real wallet funds
 }
 
 export interface StrategyStats {
