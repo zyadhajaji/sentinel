@@ -10,6 +10,8 @@ interface Props {
   isNew?: boolean
   onTrade: (signal: Signal) => void
   onDetail?: (signal: Signal) => void
+  onCall?: (signal: Signal) => void
+  isCalled?: boolean
 }
 
 // ── Format helpers ────────────────────────────────────────────────────────────
@@ -108,6 +110,16 @@ function rugLabel(score: number | null): { text: string; color: string } | null 
   if (score >= 700) return null
   if (score >= 500) return { text: '⚠ WARN', color: '#ffcc00' }
   return { text: '☠ RUG', color: '#ff3355' }
+}
+
+// ── Holder concentration risk ─────────────────────────────────────────────────
+function holderConcentrationLabel(pct: number | null, rugRisks: string[]): { text: string; color: string } | null {
+  const hasBundle = rugRisks.some(r => /bundle|sniper|coordin/i.test(r))
+  if (hasBundle) return { text: '🔴 BUNDLE RISK', color: '#ff3355' }
+  if (pct === null) return null
+  if (pct >= 80) return { text: `🔴 TOP ${pct.toFixed(0)}% HELD`, color: '#ff3355' }
+  if (pct >= 50) return { text: `⚠ TOP ${pct.toFixed(0)}% HELD`, color: '#ffcc00' }
+  return null
 }
 
 // ── Mini sparkline ────────────────────────────────────────────────────────────
@@ -251,7 +263,7 @@ function NarrativePill({ tag }: { tag: string }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
+export function TokenCard({ signal, isNew, onTrade, onDetail, onCall, isCalled }: Props) {
   const [showBreakdown, setShowBreakdown] = useState(false)
   const [copied, setCopied] = useState(false)
   const { watchlist, toggle } = useWatchlist()
@@ -259,6 +271,7 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
 
   const hot = computeHot(signal)
   const rug = rugLabel(signal.rug_score)
+  const concentration = holderConcentrationLabel(signal.top_holder_pct, signal.rug_risks)
   const grade = GRADE_CONFIG[signal.score_grade]
   const isUp = signal.price_change_1h >= 0
   const pxColor = isUp ? '#00ff88' : '#ff3355'
@@ -299,6 +312,14 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
           {banner.text}
         </div>
       ))}
+      {concentration && (
+        <div
+          className="flex items-center gap-2 px-4 py-1 text-[10px] font-mono font-bold tracking-wider"
+          style={{ background: `${concentration.color}08`, borderBottom: `1px solid ${concentration.color}20`, color: concentration.color }}
+        >
+          {concentration.text}
+        </div>
+      )}
 
       {/* ── Section A: Main row ─────────────────────────────────────────── */}
       <div className="flex items-start gap-2.5 p-2.5">
@@ -354,6 +375,22 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
                 <span className="text-[#252525]">·</span>
                 <span className="text-[#444444] text-[9px]">
                   {signal.holders >= 1000 ? `${(signal.holders / 1000).toFixed(1)}K` : signal.holders} holders
+                </span>
+              </>
+            )}
+            {signal.top_holder_pct !== null && (
+              <>
+                <span className="text-[#252525]">·</span>
+                <span
+                  className="text-[9px] font-mono font-bold"
+                  style={{
+                    color: signal.top_holder_pct >= 80 ? '#ff3355'
+                      : signal.top_holder_pct >= 50 ? '#ffcc00'
+                      : '#444',
+                  }}
+                  title="Top holder concentration"
+                >
+                  TOP {signal.top_holder_pct.toFixed(0)}%
                 </span>
               </>
             )}
@@ -513,6 +550,19 @@ export function TokenCard({ signal, isNew, onTrade, onDetail }: Props) {
         >
           <StarIcon filled={isWatched} />
         </button>
+        {onCall && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onCall(signal) }}
+            className="h-7 px-3 text-[11px] font-mono font-bold rounded-xl border transition-all cursor-pointer shrink-0"
+            style={isCalled
+              ? { borderColor: '#00ff8860', color: '#00ff88', background: '#00ff8815' }
+              : { borderColor: '#00ff8825', color: '#00ff8880', background: 'transparent' }
+            }
+            aria-label={isCalled ? 'Called' : 'Call this token'}
+          >
+            {isCalled ? '✓ CALLED' : 'CALL'}
+          </button>
+        )}
         <button
           onClick={(e) => { e.stopPropagation(); onTrade(signal) }}
           className="h-7 px-3 text-[11px] font-mono font-bold rounded-xl border transition-all cursor-pointer shrink-0"

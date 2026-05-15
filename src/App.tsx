@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Signal } from './types'
 import { Header } from './components/Header'
 import { SignalFeed } from './components/SignalFeed'
@@ -12,6 +12,7 @@ import { ProfileModal } from './components/ProfileModal'
 import { AdminProvider, useAdmin } from './contexts/AdminContext'
 import { useSignalFeed } from './hooks/useSignalFeed'
 import { useBacktest } from './hooks/useBacktest'
+import { useCalls } from './hooks/useCalls'
 import { useWallet } from '@solana/wallet-adapter-react'
 
 type Tab = 'terminal' | 'backtest' | 'portfolio' | 'calendar'
@@ -30,6 +31,11 @@ function AppCore() {
     strategies, positions, stats, botActivity,
     updateStrategy, toggleAutoTrade, updatePositionSize, addStrategy, deleteStrategy, clearPositions,
   } = useBacktest(signals, fakeBalance ?? undefined)
+
+  const { calls, calledCAs, addCall, removeCall, refreshCalls, clearCalls } = useCalls()
+
+  // Keep call prices live — refresh whenever signals update
+  useEffect(() => { refreshCalls(signals) }, [signals, refreshCalls])
 
   const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null)
   const [detailSignal, setDetailSignal] = useState<Signal | null>(null)
@@ -97,6 +103,11 @@ function AppCore() {
                 watchedCAs={watchedCAs}
                 onAddWatchedCA={addWatchedCA}
                 onRemoveWatchedCA={removeWatchedCA}
+                calls={calls}
+                calledCAs={calledCAs}
+                onCall={addCall}
+                onRemoveCall={removeCall}
+                onClearCalls={clearCalls}
               />
             </div>
             <div className="w-[320px] shrink-0 bg-[#0d0d0d] overflow-hidden hidden md:flex flex-col">

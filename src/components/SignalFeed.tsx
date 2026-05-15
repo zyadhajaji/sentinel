@@ -3,9 +3,11 @@ import type { Signal } from '../types'
 import type { AlertSettings } from '../lib/alertEngine'
 import { requestNotificationPermission } from '../lib/alertEngine'
 import { TokenCard } from './TokenCard'
+import { CallsPanel } from './CallsPanel'
 import { useWatchlist } from '../contexts/WatchlistContext'
 import { loadStorage, saveStorage } from '../lib/storage'
 import { storageKey } from '../lib/appMode'
+import type { CallRecord } from '../hooks/useCalls'
 
 interface Props {
   signals: Signal[]
@@ -17,6 +19,11 @@ interface Props {
   watchedCAs: string[]
   onAddWatchedCA: (ca: string) => void
   onRemoveWatchedCA: (ca: string) => void
+  calls: CallRecord[]
+  calledCAs: Set<string>
+  onCall: (signal: Signal) => void
+  onRemoveCall: (ca: string) => void
+  onClearCalls: () => void
 }
 
 // ── MC Tier filter ─────────────────────────────────────────────────────────────
@@ -156,10 +163,11 @@ function AlertPanel({ settings, onChange }: { settings: AlertSettings; onChange:
   )
 }
 
-export function SignalFeed({ signals, newSignalId, onTrade, onDetail, alertSettings, onAlertSettingsChange, watchedCAs }: Props) {
+export function SignalFeed({ signals, newSignalId, onTrade, onDetail, alertSettings, onAlertSettingsChange, watchedCAs, calls, calledCAs, onCall, onRemoveCall, onClearCalls }: Props) {
   const [filter, setFilter] = useState<McFilter>(() => loadStorage<McFilter>(storageKey('sentinel_filter'), 'ALL'))
   const [search, setSearch] = useState('')
   const [showAlerts, setShowAlerts] = useState(false)
+  const [showCalls, setShowCalls] = useState(false)
   const { watchlist } = useWatchlist()
 
   function handleFilterChange(f: McFilter) {
@@ -205,11 +213,20 @@ export function SignalFeed({ signals, newSignalId, onTrade, onDetail, alertSetti
                 {watchedCAs.length} watched
               </span>
             )}
+            {/* Calls toggle */}
+            <button
+              onClick={() => { setShowCalls(v => !v); setShowAlerts(false) }}
+              className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-all cursor-pointer ${
+                showCalls ? 'border-[#00ff8840] text-[#00ff88] bg-[#00ff8810]' : 'border-[#1e1e1e] text-[#444]'
+              }`}
+            >
+              CALLS{calls.length > 0 && <span className="ml-1 tabular-nums">{calls.length}</span>}
+            </button>
           </div>
 
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setShowAlerts(v => !v)}
+              onClick={() => { setShowAlerts(v => !v); setShowCalls(false) }}
               className={`text-[13px] min-h-[36px] min-w-[36px] flex items-center justify-center rounded border transition-all mr-0.5 cursor-pointer ${
                 showAlerts ? 'border-[#2a2a2a] bg-[#141414]' : 'border-transparent'
               } ${alertsOn ? 'text-[#00d4ff]' : 'text-[#444444]'}`}
@@ -295,6 +312,10 @@ export function SignalFeed({ signals, newSignalId, onTrade, onDetail, alertSetti
         <AlertPanel settings={alertSettings} onChange={onAlertSettingsChange} />
       )}
 
+      {showCalls && (
+        <CallsPanel calls={calls} onRemove={onRemoveCall} onClear={onClearCalls} />
+      )}
+
       {/* ── Scrollable signal list ────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto overscroll-contain">
         <div className="p-3 space-y-2.5">
@@ -305,6 +326,8 @@ export function SignalFeed({ signals, newSignalId, onTrade, onDetail, alertSetti
               isNew={signal.id === newSignalId}
               onTrade={onTrade}
               onDetail={onDetail}
+              onCall={onCall}
+              isCalled={calledCAs.has(signal.ca)}
             />
           ))}
           {filtered.length === 0 && (
