@@ -38,10 +38,10 @@ export interface Signal {
 }
 
 export interface ScoreBreakdown {
-  liquidity: number    // 0-25
-  activity: number     // 0-20 (replaces "holders" since we don't have holder count from free API)
-  authority: number    // 0-20
-  age: number          // 0-15
-  socials: number      // 0-10
-  distribution: number // 0-10
+  activity: number     // 0-20  buy pressure (primary momentum signal)
+  distribution: number // 0-10  price change 1h (trend confirmation)
+  liquidity: number    // 0-20  pool depth
+  authority: number    // 0-20  rug safety: rug_score + mint/freeze flags
+  age: number          // 0-15  sweet-spot window 5-45 min
+  socials: number      // 0-15  Twitter + Telegram + Website
 }

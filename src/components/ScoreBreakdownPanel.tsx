@@ -6,12 +6,12 @@ interface Props {
 }
 
 const LABELS: Record<keyof ScoreBreakdown, { label: string; max: number }> = {
-  liquidity: { label: 'Liquidity', max: 25 },
-  activity: { label: 'Activity', max: 20 },
-  authority: { label: 'Authority', max: 20 },
-  age: { label: 'Age', max: 15 },
-  socials: { label: 'Socials', max: 10 },
-  distribution: { label: 'Distribution', max: 10 },
+  activity:     { label: 'Buy Pressure', max: 20 },
+  distribution: { label: 'Momentum',     max: 10 },
+  liquidity:    { label: 'Liquidity',    max: 20 },
+  authority:    { label: 'Safety',       max: 20 },
+  age:          { label: 'Age Window',   max: 15 },
+  socials:      { label: 'Socials',      max: 15 },
 }
 
 export function ScoreBreakdownPanel({ breakdown }: Props) {

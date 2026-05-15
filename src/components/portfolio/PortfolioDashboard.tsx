@@ -1,8 +1,10 @@
 import { useState, useMemo, useRef } from 'react'
 import type { Position, Strategy, StrategyStats } from '../../types/backtest'
+import { CalendarPage } from '../calendar/CalendarPage'
 import { useWalletBalance } from '../../hooks/useWalletBalance'
 import { useAdmin } from '../../contexts/AdminContext'
 import { useWallet } from '@solana/wallet-adapter-react'
+import { PnlCard } from '../PnlCard'
 
 interface Props {
   strategies: Strategy[]
@@ -476,7 +478,15 @@ function WithdrawModal({ onClose, solBalance, solPrice }: { onClose: () => void;
 }
 
 // ── Transaction Row ───────────────────────────────────────────────────────────
-function TransactionRow({ pos, strategy }: { pos: Position; strategy?: Strategy }) {
+function TransactionRow({
+  pos,
+  strategy,
+  onShare,
+}: {
+  pos: Position
+  strategy?: Strategy
+  onShare?: (pos: Position) => void
+}) {
   const pct = pnlPct(pos)
   const pnlColor = pos.totalPnlSol >= 0 ? '#00ff88' : '#ff3355'
   const strColor = strategy?.color ?? '#555'
@@ -523,12 +533,28 @@ function TransactionRow({ pos, strategy }: { pos: Position; strategy?: Strategy 
           {isOpen ? `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%` : `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`}
         </p>
       </div>
+
+      {/* Share button — only for closed positions */}
+      {!isOpen && onShare && (
+        <button
+          onClick={e => { e.stopPropagation(); onShare(pos) }}
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-[#333] hover:text-[#7c3aed] hover:bg-[#7c3aed15] transition-all cursor-pointer shrink-0"
+          aria-label="Share PnL card"
+          title="Share PnL"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+            <polyline points="16 6 12 2 8 6"/>
+            <line x1="12" y1="2" x2="12" y2="15"/>
+          </svg>
+        </button>
+      )}
     </div>
   )
 }
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
-type SubTab = 'overview' | 'chart' | 'positions' | 'history'
+type SubTab = 'overview' | 'chart' | 'positions' | 'history' | 'calendar'
 
 export function PortfolioDashboard({ strategies, positions, stats, solPrice, onClear, onProfileOpen }: Props) {
   const [subTab, setSubTab] = useState<SubTab>('overview')
@@ -537,6 +563,7 @@ export function PortfolioDashboard({ strategies, positions, stats, solPrice, onC
   const [showWithdraw, setShowWithdraw] = useState(false)
   const [balanceEditOpen, setBalanceEditOpen] = useState(false)
   const [fakeBalanceInput, setFakeBalanceInput] = useState('')
+  const [sharePos, setSharePos] = useState<Position | null>(null)
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { balance } = useWalletBalance()
@@ -724,17 +751,18 @@ export function PortfolioDashboard({ strategies, positions, stats, solPrice, onC
       </div>
 
       {/* ── Sub-tab nav ───────────────────────────────────────────────────── */}
-      <div className="flex border-b border-[#1a1a1a] bg-[#080808] sticky top-0 z-10">
+      <div className="flex border-b border-[#1a1a1a] bg-[#080808] sticky top-0 z-10 overflow-x-auto">
         {([
           { id: 'overview'  as const, label: 'Overview' },
           { id: 'chart'     as const, label: 'Chart' },
           { id: 'positions' as const, label: `Open${allOpen.length > 0 ? ` (${allOpen.length})` : ''}` },
           { id: 'history'   as const, label: 'History' },
+          { id: 'calendar'  as const, label: 'Calendar' },
         ] as const).map(t => (
           <button
             key={t.id}
             onClick={() => setSubTab(t.id)}
-            className="flex-1 py-3 text-[10px] font-mono tracking-wider transition-all cursor-pointer border-b-2"
+            className="flex-1 py-3 text-[10px] font-mono tracking-wider transition-all cursor-pointer border-b-2 whitespace-nowrap"
             style={{
               color: subTab === t.id ? '#e6e6e6' : '#444',
               borderBottomColor: subTab === t.id ? '#7c3aed' : 'transparent',
@@ -791,7 +819,8 @@ export function PortfolioDashboard({ strategies, positions, stats, solPrice, onC
                 <div className="divide-y divide-[#111]">
                   {recentTransactions.slice(0, 6).map(pos => (
                     <TransactionRow key={pos.id} pos={pos}
-                      strategy={strategies.find(s => s.id === pos.strategyId)} />
+                      strategy={strategies.find(s => s.id === pos.strategyId)}
+                      onShare={setSharePos} />
                   ))}
                 </div>
               )}
@@ -829,6 +858,11 @@ export function PortfolioDashboard({ strategies, positions, stats, solPrice, onC
           </>
         )}
 
+        {/* CALENDAR */}
+        {subTab === 'calendar' && (
+          <CalendarPage positions={positions} solPrice={solPrice} />
+        )}
+
         {/* HISTORY */}
         {subTab === 'history' && (
           <>
@@ -852,7 +886,8 @@ export function PortfolioDashboard({ strategies, positions, stats, solPrice, onC
                     .sort((a, b) => new Date(b.exitTime ?? b.entryTime).getTime() - new Date(a.exitTime ?? a.entryTime).getTime())
                     .map(pos => (
                       <TransactionRow key={pos.id} pos={pos}
-                        strategy={strategies.find(s => s.id === pos.strategyId)} />
+                        strategy={strategies.find(s => s.id === pos.strategyId)}
+                        onShare={setSharePos} />
                     ))
                   }
                 </div>
@@ -872,6 +907,13 @@ export function PortfolioDashboard({ strategies, positions, stats, solPrice, onC
           onClose={() => setShowWithdraw(false)}
           solBalance={displayBalance}
           solPrice={solPrice}
+        />
+      )}
+      {sharePos && (
+        <PnlCard
+          position={sharePos}
+          solPrice={solPrice}
+          onClose={() => setSharePos(null)}
         />
       )}
     </div>

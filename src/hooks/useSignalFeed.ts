@@ -57,6 +57,11 @@ function pairToSignal(pair: DexPair, profile?: TokenProfile, solPrice = 150): Si
   const txns1h = (pair.txns?.h1?.buys ?? 0) + (pair.txns?.h1?.sells ?? 0)
   const liquidity = pair.liquidity?.usd ?? 0
 
+  const hasTelegram = !!telegramUrl
+  const txnsH1Early = pair.txns?.h1 ?? { buys: 0, sells: 0 }
+  const totalTxnsEarly = txnsH1Early.buys + txnsH1Early.sells
+  const buyPressureEarly = totalTxnsEarly > 0 ? Math.round((txnsH1Early.buys / totalTxnsEarly) * 100) : 50
+
   const { score, grade, breakdown } = calculateScore({
     liquidity_usd: liquidity,
     txns_1h: txns1h,
@@ -64,6 +69,12 @@ function pairToSignal(pair: DexPair, profile?: TokenProfile, solPrice = 150): Si
     contract_age_minutes: contractAgeMins,
     has_twitter: hasTwitter,
     has_website: hasWebsite,
+    has_telegram: hasTelegram,
+    buy_pressure: buyPressureEarly,
+    price_change_1h: pair.priceChange?.h1 ?? 0,
+    rug_score: undefined,   // filled in after rug check
+    mint_authority_revoked: source === 'pumpfun' ? true : null,
+    freeze_authority_revoked: source === 'pumpfun' ? true : null,
   })
 
   const txnsH1 = pair.txns?.h1 ?? { buys: 0, sells: 0 }
@@ -121,6 +132,12 @@ function pumpFunToSignal(token: PumpFunToken, solPrice = 150): Signal {
     contract_age_minutes: 0,
     has_twitter: false,
     has_website: false,
+    has_telegram: false,
+    buy_pressure: 50,
+    price_change_1h: 0,
+    mint_authority_revoked: true,
+    freeze_authority_revoked: true,
+    rug_score: undefined,
   })
 
   return {
@@ -214,9 +231,29 @@ export function useSignalFeed() {
 
         // Fetch rug report in parallel
         const rug = await fetchRugReport(token.mint)
-        const withRug: Signal = rug
+        let withRug: Signal = rug
           ? { ...enriched, rug_score: rug.score, rug_risks: rug.risks, top_holder_pct: rug.topHolderPct }
           : enriched
+
+        // Re-score now that we have rug data — safety component will update
+        if (rug) {
+          const hasTg = !!enriched.telegram_url
+          const rescored = calculateScore({
+            liquidity_usd: enriched.liquidity_usd,
+            txns_1h: 0,
+            source: enriched.source,
+            contract_age_minutes: enriched.contract_age_minutes,
+            has_twitter: enriched.has_twitter,
+            has_website: enriched.has_website,
+            has_telegram: hasTg,
+            buy_pressure: enriched.buy_pressure,
+            price_change_1h: enriched.price_change_1h,
+            rug_score: rug.score,
+            mint_authority_revoked: enriched.mint_authority_revoked,
+            freeze_authority_revoked: enriched.freeze_authority_revoked,
+          })
+          withRug = { ...withRug, scanner_score: rescored.score, score_grade: rescored.grade, score_breakdown: rescored.breakdown }
+        }
 
         setSignals(prev => prev.map(s => s.ca === token.mint ? { ...withRug, id: s.id, entry_mcap_usd: s.entry_mcap_usd } : s))
       }, 45_000)
