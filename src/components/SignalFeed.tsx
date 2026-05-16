@@ -5,6 +5,7 @@ import { requestNotificationPermission } from '../lib/alertEngine'
 import { TokenCard } from './TokenCard'
 import { CallsPanel } from './CallsPanel'
 import { useWatchlist } from '../contexts/WatchlistContext'
+import { useCaLookup } from '../hooks/useCaLookup'
 import { loadStorage, saveStorage } from '../lib/storage'
 import { storageKey } from '../lib/appMode'
 import type { CallRecord } from '../hooks/useCalls'
@@ -12,6 +13,7 @@ import type { CallRecord } from '../hooks/useCalls'
 interface Props {
   signals: Signal[]
   newSignalId: string | null
+  solPrice?: number
   onTrade: (signal: Signal) => void
   onDetail: (signal: Signal) => void
   alertSettings: AlertSettings
@@ -163,12 +165,13 @@ function AlertPanel({ settings, onChange }: { settings: AlertSettings; onChange:
   )
 }
 
-export function SignalFeed({ signals, newSignalId, onTrade, onDetail, alertSettings, onAlertSettingsChange, watchedCAs, calls, calledCAs, onCall, onRemoveCall, onClearCalls }: Props) {
+export function SignalFeed({ signals, newSignalId, solPrice = 150, onTrade, onDetail, alertSettings, onAlertSettingsChange, watchedCAs, calls, calledCAs, onCall, onRemoveCall, onClearCalls }: Props) {
   const [filter, setFilter] = useState<McFilter>(() => loadStorage<McFilter>(storageKey('sentinel_filter'), 'ALL'))
   const [search, setSearch] = useState('')
   const [showAlerts, setShowAlerts] = useState(false)
   const [showCalls, setShowCalls] = useState(false)
   const { watchlist } = useWatchlist()
+  const { state: lookupState, isCA } = useCaLookup(search, solPrice)
 
   function handleFilterChange(f: McFilter) {
     setFilter(f)
@@ -319,6 +322,53 @@ export function SignalFeed({ signals, newSignalId, onTrade, onDetail, alertSetti
       {/* ── Scrollable signal list ────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto overscroll-contain">
         <div className="p-3 space-y-2.5">
+
+          {/* ── CA Lookup result ───────────────────────────────────────────────── */}
+          {isCA && (
+            <>
+              {lookupState.status === 'loading' && (
+                <div className="flex items-center gap-2 px-3 py-3 rounded-2xl border border-[#1e1e1e] bg-[#0d0d0d] text-[11px] font-mono text-[#444]">
+                  <svg className="animate-spin shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2">
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  </svg>
+                  Fetching token…
+                </div>
+              )}
+              {lookupState.status === 'not_found' && (
+                <div className="flex items-center gap-2 px-3 py-3 rounded-2xl border border-[#ff335520] bg-[#0d0d0d] text-[11px] font-mono text-[#ff3355]">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                  Token not found on Solana
+                </div>
+              )}
+              {lookupState.status === 'error' && (
+                <div className="flex items-center gap-2 px-3 py-3 rounded-2xl border border-[#1e1e1e] bg-[#0d0d0d] text-[11px] font-mono text-[#555]">
+                  Lookup failed — check connection
+                </div>
+              )}
+              {lookupState.status === 'found' && (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5 px-0.5">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#00d4ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <span className="text-[9px] font-mono text-[#00d4ff] uppercase tracking-wider">Lookup result</span>
+                  </div>
+                  <TokenCard
+                    signal={lookupState.signal}
+                    onTrade={onTrade}
+                    onDetail={onDetail}
+                    onCall={onCall}
+                    isCalled={calledCAs.has(lookupState.signal.ca)}
+                  />
+                </div>
+              )}
+              <div className="border-t border-[#111] my-1" />
+            </>
+          )}
+
+          {/* ── Live feed ─────────────────────────────────────────────────────── */}
           {filtered.map(signal => (
             <TokenCard
               key={signal.id}
@@ -330,7 +380,7 @@ export function SignalFeed({ signals, newSignalId, onTrade, onDetail, alertSetti
               isCalled={calledCAs.has(signal.ca)}
             />
           ))}
-          {filtered.length === 0 && (
+          {filtered.length === 0 && !isCA && (
             <div className="flex flex-col items-center justify-center h-40 gap-2">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#333333" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 {filter === 'STARRED'

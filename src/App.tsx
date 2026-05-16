@@ -96,6 +96,7 @@ function AppCore() {
               <SignalFeed
                 signals={signals}
                 newSignalId={newSignalId}
+                solPrice={solPrice}
                 onTrade={setSelectedSignal}
                 onDetail={setDetailSignal}
                 alertSettings={alertSettings}
