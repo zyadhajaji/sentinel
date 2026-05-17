@@ -13,7 +13,6 @@ interface Props {
 export function TradePanel({ signal, onClose }: Props) {
   const [solAmount, setSolAmount] = useState('0.1')
   const [slippage, setSlippage] = useState('1')
-  const [side] = useState<'buy' | 'sell'>('buy')
   const { connected } = useWallet()
   const { setVisible } = useWalletModal()
 

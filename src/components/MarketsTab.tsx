@@ -51,13 +51,6 @@ function fmtSize(n: number, coin: string): string {
   return `${n.toFixed(4)} ${coin}`
 }
 
-function fmtFunding(rate: number): string {
-  // hourly → annualised % for display
-  const annualised = rate * 24 * 365 * 100
-  const sign = annualised >= 0 ? '+' : ''
-  return `${sign}${annualised.toFixed(2)}% pa`
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Place Order Panel
 // ─────────────────────────────────────────────────────────────────────────────

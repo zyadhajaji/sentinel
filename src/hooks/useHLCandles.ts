@@ -9,7 +9,7 @@
  *   // Pass `bars` directly to lightweight-charts setData()
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getCandleSnapshot } from '../lib/hyperliquid/client'
 import { getHyperliquidWS } from '../lib/hyperliquid/ws'
 import type { OHLCVBar, HLCandle, HLInterval } from '../lib/hyperliquid/types'

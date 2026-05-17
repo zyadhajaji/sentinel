@@ -10,7 +10,7 @@
  * "a" = mainnet, "b" = testnet
  */
 
-import { keccak256, toBytes } from 'viem'
+import { keccak256, toBytes, bytesToHex } from 'viem'
 import { encode as msgpackEncode } from '@msgpack/msgpack'
 import type { WalletClient } from 'viem'
 import type { HLAction } from './types'
@@ -91,8 +91,8 @@ export interface HLSignature {
 
 function parseSig(sig: `0x${string}`): HLSignature {
   const bytes = toBytes(sig)
-  const r = `0x${Buffer.from(bytes.slice(0, 32)).toString('hex')}`
-  const s = `0x${Buffer.from(bytes.slice(32, 64)).toString('hex')}`
+  const r = bytesToHex(bytes.slice(0, 32))
+  const s = bytesToHex(bytes.slice(32, 64))
   // v: Ethereum uses 27/28, some wallets return 0/1 — normalise
   const rawV = bytes[64]!
   const v = rawV < 27 ? rawV + 27 : rawV

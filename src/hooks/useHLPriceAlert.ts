@@ -91,7 +91,7 @@ export function useHLPriceAlert(onFire?: AlertFireHandler): UseHLPriceAlertResul
   // Subscribe to live mid prices via WS
   useEffect(() => {
     const ws = getHyperliquidWS()
-    const unsub = ws.onAllMids((mids: Record<string, string>) => {
+    const unsub = ws.onAllMids(({ mids }) => {
       const current = alertsRef.current
       // Only check unfired alerts
       const pending = current.filter(a => !a.firedAt)
