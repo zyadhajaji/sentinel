@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import type { Signal } from '../types'
 import { loadStorage, saveStorage } from '../lib/storage'
 import { storageKey } from '../lib/appMode'
@@ -103,7 +103,9 @@ export function useCalls() {
     saveCalls([])
   }, [])
 
-  const calledCAs = new Set(calls.map(c => c.ca))
+  const calledCAs = useMemo(() => new Set(calls.map(c => c.ca)), [calls])
 
-  return { calls, calledCAs, addCall, removeCall, refreshCalls, clearCalls }
+  const getCallCAs = useCallback(() => calls.map(c => c.ca), [calls])
+
+  return { calls, calledCAs, addCall, removeCall, refreshCalls, clearCalls, getCallCAs }
 }

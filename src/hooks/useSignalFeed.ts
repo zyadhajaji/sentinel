@@ -256,7 +256,7 @@ export function useSignalFeed() {
         }
 
         setSignals(prev => prev.map(s => s.ca === token.mint ? { ...withRug, id: s.id, entry_mcap_usd: s.entry_mcap_usd } : s))
-      }, 45_000)
+      }, 15_000)
     })
 
     return () => pf.destroy()
@@ -270,11 +270,47 @@ export function useSignalFeed() {
       const profiles = await fetchTokenProfiles()
       if (!active) return
 
-      for (const profile of profiles.slice(0, 10)) {
+      for (const [i, profile] of profiles.slice(0, 10).entries()) {
         const pair = await fetchTokenPairs(profile.tokenAddress)
         if (!active || !pair) continue
         const signal = pairToSignal(pair, profile, solPriceRef.current)
-        addSignal(signal)
+
+        // Fetch rug report for the first 5 profiles to avoid rate-limiting
+        if (i < 5) {
+          await new Promise(r => setTimeout(r, 300))
+          if (!active) break
+          const rug = await fetchRugReport(profile.tokenAddress)
+          let finalSignal = signal
+          if (rug) {
+            const hasTg = !!signal.telegram_url
+            const rescored = calculateScore({
+              liquidity_usd: signal.liquidity_usd,
+              txns_1h: 0,
+              source: signal.source,
+              contract_age_minutes: signal.contract_age_minutes,
+              has_twitter: signal.has_twitter,
+              has_website: signal.has_website,
+              has_telegram: hasTg,
+              buy_pressure: signal.buy_pressure,
+              price_change_1h: signal.price_change_1h,
+              rug_score: rug.score,
+              mint_authority_revoked: signal.mint_authority_revoked,
+              freeze_authority_revoked: signal.freeze_authority_revoked,
+            })
+            finalSignal = {
+              ...signal,
+              rug_score: rug.score,
+              rug_risks: rug.risks,
+              top_holder_pct: rug.topHolderPct,
+              scanner_score: rescored.score,
+              score_grade: rescored.grade,
+              score_breakdown: rescored.breakdown,
+            }
+          }
+          addSignal(finalSignal)
+        } else {
+          addSignal(signal)
+        }
       }
     }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { Signal } from './types'
 import { Header } from './components/Header'
 import { SignalFeed } from './components/SignalFeed'
@@ -36,6 +36,16 @@ function AppCore() {
 
   // Keep call prices live — refresh whenever signals update
   useEffect(() => { refreshCalls(signals) }, [signals, refreshCalls])
+
+  // Auto-watch called token CAs so their prices refresh every 60s via the watchlist mechanism
+  const callCAsRef = useRef<string[]>([])
+  useEffect(() => {
+    const callCAs = calls.map(c => c.ca)
+    callCAsRef.current = callCAs
+    callCAs.forEach(ca => {
+      if (!watchedCAs.includes(ca)) addWatchedCA(ca)
+    })
+  }, [calls, watchedCAs, addWatchedCA])
 
   const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null)
   const [detailSignal, setDetailSignal] = useState<Signal | null>(null)
