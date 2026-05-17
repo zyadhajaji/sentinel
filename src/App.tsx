@@ -9,6 +9,7 @@ import { PortfolioDashboard } from './components/portfolio/PortfolioDashboard'
 import { CalendarPage } from './components/calendar/CalendarPage'
 import { AdminPanel } from './components/admin/AdminPanel'
 import { ProfileModal } from './components/ProfileModal'
+import { MarketsTab } from './components/MarketsTab'
 import { AdminProvider, useAdmin } from './contexts/AdminContext'
 import { useSignalFeed } from './hooks/useSignalFeed'
 import { useBacktest } from './hooks/useBacktest'
@@ -169,12 +170,8 @@ function AppCore() {
         )}
 
         {tab === 'markets' && (
-          <div className="h-full overflow-hidden flex items-center justify-center">
-            {/* Markets tab — UI shell ready, full component connects here */}
-            <div className="text-center space-y-2">
-              <p className="text-[#555] font-mono text-[13px]">HYPERLIQUID MARKETS</p>
-              <p className="text-[#333] font-mono text-[11px]">Frontend component connects here</p>
-            </div>
+          <div className="h-full overflow-hidden">
+            <MarketsTab />
           </div>
         )}
       </div>
