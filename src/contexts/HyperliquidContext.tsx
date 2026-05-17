@@ -30,6 +30,8 @@ import type {
   HLMarketRow, HLPositionRow, HLOrderRow,
   PlaceOrderParams,
 } from '../lib/hyperliquid'
+import { IS_DEMO } from '../lib/appMode'
+import { DEMO_DEFAULT_BALANCE_USD } from '../lib/hyperliquid/constants'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Context shape
@@ -99,8 +101,9 @@ export function HyperliquidProvider({ children }: Props) {
   const [positions,          setPositions]          = useState<HLPositionRow[]>([])
   const [orders,             setOrders]             = useState<HLOrderRow[]>([])
   const [allMids,            setAllMids]            = useState<Record<string, number>>({})
-  const [accountValue,       setAccountValue]       = useState(0)
-  const [availableBalance,   setAvailableBalance]   = useState(0)
+  // Demo mode seeds realistic starting values so the UI looks alive without a wallet
+  const [accountValue,       setAccountValue]       = useState(IS_DEMO ? DEMO_DEFAULT_BALANCE_USD : 0)
+  const [availableBalance,   setAvailableBalance]   = useState(IS_DEMO ? DEMO_DEFAULT_BALANCE_USD : 0)
   const [isLoadingAccount,   setIsLoadingAccount]   = useState(false)
   const [isLoadingMarkets,   setIsLoadingMarkets]   = useState(false)
   const [lastError,          setLastError]          = useState<string | null>(null)

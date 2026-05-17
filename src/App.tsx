@@ -15,7 +15,7 @@ import { useBacktest } from './hooks/useBacktest'
 import { useCalls } from './hooks/useCalls'
 import { useWallet } from '@solana/wallet-adapter-react'
 
-type Tab = 'terminal' | 'backtest' | 'portfolio' | 'calendar'
+type Tab = 'terminal' | 'backtest' | 'portfolio' | 'calendar' | 'markets'
 
 // ── AppCore lives INSIDE AdminProvider, so it can read fakeBalance ────────────
 function AppCore() {
@@ -83,6 +83,7 @@ function AppCore() {
           { id: 'backtest' as const, label: 'BOT' },
           { id: 'portfolio' as const, label: 'PORTFOLIO' },
           { id: 'calendar' as const, label: 'CALENDAR' },
+          { id: 'markets' as const, label: 'MARKETS' },
         ]).map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`text-[11px] font-mono px-3 py-1.5 rounded transition-all relative min-h-[36px] cursor-pointer ${
@@ -166,6 +167,16 @@ function AppCore() {
             <CalendarPage positions={positions} solPrice={solPrice} />
           </div>
         )}
+
+        {tab === 'markets' && (
+          <div className="h-full overflow-hidden flex items-center justify-center">
+            {/* Markets tab — UI shell ready, full component connects here */}
+            <div className="text-center space-y-2">
+              <p className="text-[#555] font-mono text-[13px]">HYPERLIQUID MARKETS</p>
+              <p className="text-[#333] font-mono text-[11px]">Frontend component connects here</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {detailSignal && (
@@ -209,6 +220,11 @@ function AppCore() {
             { id: 'calendar' as const, label: 'CALENDAR', icon: (
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            )},
+            { id: 'markets' as const, label: 'MARKETS', icon: (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
               </svg>
             )},
           ]).map(t => (
