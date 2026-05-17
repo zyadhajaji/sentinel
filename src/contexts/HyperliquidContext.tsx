@@ -17,8 +17,7 @@ import {
   createContext, useContext, useState, useEffect, useCallback,
   useRef, type ReactNode,
 } from 'react'
-import { useAccount, useWalletClient, useConnect, useDisconnect } from 'wagmi'
-import { injected } from 'wagmi/connectors'
+import { useAccount, useWalletClient, useConnect, useDisconnect, useConnectors } from 'wagmi'
 import {
   getMarkets, getPositions, getParsedOpenOrders, getAllMids,
   placeOrder as hlPlaceOrder,
@@ -42,7 +41,10 @@ export interface HyperliquidContextValue {
   isConnected: boolean
   address: string | null
   chainId: number | undefined
-  connectWallet: () => Promise<void>
+  /** Registered wallet connectors (MetaMask, Coinbase, WalletConnect, Safe) */
+  walletConnectors: readonly { id: string; name: string; icon?: string }[]
+  /** Connect using a specific connector by index (default: 0 = MetaMask/injected) */
+  connectWallet: (connectorIndex?: number) => Promise<void>
   disconnectWallet: () => void
 
   // ── Account state
@@ -95,6 +97,7 @@ export function HyperliquidProvider({ children }: Props) {
   const { data: walletClient }            = useWalletClient()
   const { connectAsync }                  = useConnect()
   const { disconnect }                    = useDisconnect()
+  const configConnectors                  = useConnectors()
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [markets,            setMarkets]            = useState<HLMarketRow[]>([])
@@ -231,9 +234,11 @@ export function HyperliquidProvider({ children }: Props) {
   }, [walletClient])
 
   // ── Wallet actions ────────────────────────────────────────────────────────
-  const connectWallet = useCallback(async () => {
-    await connectAsync({ connector: injected() })
-  }, [connectAsync])
+  const connectWallet = useCallback(async (connectorIndex = 0) => {
+    const connector = configConnectors[connectorIndex]
+    if (!connector) throw new Error('No wallet connector available')
+    await connectAsync({ connector })
+  }, [connectAsync, configConnectors])
 
   const disconnectWallet = useCallback(() => {
     disconnect()
@@ -244,6 +249,7 @@ export function HyperliquidProvider({ children }: Props) {
     isConnected,
     address:           address ?? null,
     chainId,
+    walletConnectors:  configConnectors,
     connectWallet,
     disconnectWallet,
     accountValue,

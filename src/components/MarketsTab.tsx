@@ -13,10 +13,8 @@ import { useState, useMemo, useCallback } from 'react'
 import { useHyperliquid } from '../contexts/HyperliquidContext'
 import type { HLMarketRow, HLPositionRow, HLOrderRow } from '../lib/hyperliquid/types'
 import { getCoinColor, getCoinFullName, POPULAR_MARKETS } from '../lib/hyperliquid/constants'
-import {
-  calcLiquidationPrice,
-  DEFAULT_LEVERAGE,
-} from '../lib/hyperliquid'
+import { calcLiquidationPrice, DEFAULT_LEVERAGE } from '../lib/hyperliquid'
+import { WalletModal } from './WalletModal'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Formatters
@@ -503,29 +501,62 @@ function MarketRow({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Connect Wallet CTA
+// Connect Wallet CTA (inline, used inside tabs)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ConnectWalletCTA({ onConnect }: { onConnect: () => void }) {
+function ConnectWalletCTA({ onOpenModal }: { onOpenModal: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-8 px-6 text-center">
-      <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 bg-[#00d4ff08] border border-[#00d4ff15]">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#00d4ff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <div className="flex flex-col items-center justify-center py-10 px-6 text-center gap-3">
+      <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-[#00d4ff06] border border-[#00d4ff15]">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00d4ff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <rect x="2" y="7" width="20" height="14" rx="2" />
           <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
           <circle cx="12" cy="14" r="2" />
         </svg>
       </div>
-      <h3 className="text-[14px] font-bold text-[#e6e6e6] mb-1">Connect EVM Wallet</h3>
-      <p className="text-[11px] font-mono text-[#444] leading-relaxed max-w-[240px] mb-4">
-        Connect MetaMask or any EVM wallet to trade Hyperliquid perps directly from the terminal
-      </p>
+      <div>
+        <p className="text-[13px] font-bold text-[#e6e6e6]">EVM Wallet Required</p>
+        <p className="text-[10px] font-mono text-[#444] mt-1 leading-relaxed max-w-[220px]">
+          Connect MetaMask, Coinbase, or any EVM wallet to view positions and trade
+        </p>
+      </div>
       <button
-        onClick={onConnect}
-        className="px-6 py-2.5 rounded-xl text-[12px] font-mono font-bold bg-[#00d4ff10] border border-[#00d4ff40] text-[#00d4ff] hover:bg-[#00d4ff20] hover:border-[#00d4ff60] transition-all cursor-pointer"
+        onClick={onOpenModal}
+        className="px-5 py-2 rounded-xl text-[11px] font-mono font-bold bg-[#00d4ff10] border border-[#00d4ff30] text-[#00d4ff] hover:bg-[#00d4ff20] transition-all cursor-pointer"
       >
         CONNECT WALLET
       </button>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Market row skeleton
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MarketRowSkeleton() {
+  return (
+    <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#0a0a0a] animate-pulse">
+      <div className="w-28 shrink-0 flex items-center gap-2">
+        <div className="w-1.5 h-1.5 rounded-full bg-[#1a1a1a] shrink-0" />
+        <div className="h-3 w-14 bg-[#141414] rounded" />
+      </div>
+      <div className="w-28 shrink-0 flex justify-end">
+        <div className="h-3 w-20 bg-[#141414] rounded" />
+      </div>
+      <div className="w-20 shrink-0 flex justify-end">
+        <div className="h-3 w-12 bg-[#141414] rounded" />
+      </div>
+      <div className="hidden sm:flex w-28 shrink-0 justify-end">
+        <div className="h-3 w-16 bg-[#141414] rounded" />
+      </div>
+      <div className="hidden md:flex w-24 shrink-0 justify-end">
+        <div className="h-3 w-14 bg-[#141414] rounded" />
+      </div>
+      <div className="hidden lg:flex flex-1 justify-end">
+        <div className="h-3 w-16 bg-[#141414] rounded" />
+      </div>
+      <div className="w-16 shrink-0" />
     </div>
   )
 }
@@ -558,6 +589,7 @@ export function MarketsTab() {
   const [selectedMarket, setSelectedMarket] = useState<HLMarketRow | null>(null)
   const [search, setSearch] = useState('')
   const [showFavourites, setShowFavourites] = useState(false)
+  const [walletModalOpen, setWalletModalOpen] = useState(false)
 
   const openCount   = hl.positions.length
   const orderCount  = hl.orders.length
@@ -615,7 +647,18 @@ export function MarketsTab() {
         {/* Account bar */}
         <div className="shrink-0 bg-[#080808] border-b border-[#141414]">
           {!hl.isConnected ? (
-            <ConnectWalletCTA onConnect={hl.connectWallet} />
+            <div className="flex items-center justify-between px-4 py-3">
+              <div>
+                <p className="text-[11px] font-mono text-[#555]">HYPERLIQUID PERPS</p>
+                <p className="text-[10px] font-mono text-[#2a2a2a] mt-0.5">Connect EVM wallet to trade & view positions</p>
+              </div>
+              <button
+                onClick={() => setWalletModalOpen(true)}
+                className="px-4 py-2 rounded-xl text-[11px] font-mono font-bold bg-[#00d4ff10] border border-[#00d4ff30] text-[#00d4ff] hover:bg-[#00d4ff20] transition-all cursor-pointer shrink-0"
+              >
+                CONNECT WALLET
+              </button>
+            </div>
           ) : (
             <div className="px-4 py-3">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -641,11 +684,19 @@ export function MarketsTab() {
                   sub="limit / tp / sl"
                 />
               </div>
-              {hl.lastError && (
-                <p className="mt-2 text-[10px] font-mono text-[#ff3355] bg-[#ff335508] border border-[#ff335520] rounded-lg px-3 py-2">
-                  {hl.lastError}
-                </p>
-              )}
+              <div className="mt-2 flex items-center justify-between">
+                {hl.lastError ? (
+                  <p className="text-[10px] font-mono text-[#ff3355] bg-[#ff335508] border border-[#ff335520] rounded-lg px-3 py-2 flex-1 mr-2">
+                    {hl.lastError}
+                  </p>
+                ) : <div />}
+                <button
+                  onClick={hl.disconnectWallet}
+                  className="text-[9px] font-mono text-[#333] hover:text-[#ff3355] transition-colors cursor-pointer px-2 py-1 rounded border border-transparent hover:border-[#ff335520]"
+                >
+                  disconnect
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -736,12 +787,23 @@ export function MarketsTab() {
                 <span className="w-16 shrink-0" />
               </div>
 
-              {/* Market rows */}
-              {sortedMarkets.length === 0 ? (
-                <div className="flex items-center justify-center py-16">
+              {/* Market rows — skeletons while loading, real rows once loaded */}
+              {hl.isLoadingMarkets && hl.markets.length === 0 ? (
+                Array.from({ length: 12 }).map((_, i) => <MarketRowSkeleton key={i} />)
+              ) : sortedMarkets.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
                   <p className="text-[#333] font-mono text-[11px]">
-                    {hl.isLoadingMarkets ? 'Loading markets…' : 'No markets found'}
+                    {hl.lastError ? 'Failed to load markets' : 'No markets found'}
                   </p>
+                  {hl.lastError && (
+                    <p className="text-[10px] font-mono text-[#ff3355] max-w-[280px] text-center">{hl.lastError}</p>
+                  )}
+                  <button
+                    onClick={hl.refreshMarkets}
+                    className="text-[10px] font-mono text-[#00d4ff] hover:underline cursor-pointer"
+                  >
+                    Retry
+                  </button>
                 </div>
               ) : (
                 sortedMarkets.map(market => (
@@ -761,7 +823,7 @@ export function MarketsTab() {
           {subTab === 'positions' && (
             <>
               {!hl.isConnected ? (
-                <ConnectWalletCTA onConnect={hl.connectWallet} />
+                <ConnectWalletCTA onOpenModal={() => setWalletModalOpen(true)} />
               ) : hl.positions.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-3">
                   <p className="text-[#333] font-mono text-[11px]">No open positions</p>
@@ -794,7 +856,7 @@ export function MarketsTab() {
           {subTab === 'orders' && (
             <>
               {!hl.isConnected ? (
-                <ConnectWalletCTA onConnect={hl.connectWallet} />
+                <ConnectWalletCTA onOpenModal={() => setWalletModalOpen(true)} />
               ) : hl.orders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-2">
                   <p className="text-[#333] font-mono text-[11px]">No open orders</p>
@@ -811,9 +873,7 @@ export function MarketsTab() {
 
       {/* Order panel (side panel on desktop, full screen on mobile) */}
       {selectedMarket && (
-        <div className={`shrink-0 overflow-hidden ${
-          selectedMarket ? 'flex flex-col' : 'hidden'
-        } w-full lg:w-[340px] border-l border-[#141414]`}>
+        <div className="shrink-0 overflow-hidden flex flex-col w-full lg:w-[340px] border-l border-[#141414]">
           {hl.isConnected ? (
             <OrderPanel
               market={selectedMarket}
@@ -825,16 +885,22 @@ export function MarketsTab() {
           ) : (
             <div className="flex flex-col h-full">
               <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a]">
-                <span className="text-[12px] font-mono font-bold text-[#e6e6e6]">{selectedMarket.coin}-PERP</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full" style={{ background: getCoinColor(selectedMarket.coin) }} />
+                  <span className="text-[12px] font-mono font-bold text-[#e6e6e6]">{selectedMarket.coin}-PERP</span>
+                </div>
                 <button onClick={() => setSelectedMarket(null)} className="text-[#444] hover:text-[#888] cursor-pointer">✕</button>
               </div>
-              <div className="flex-1 flex items-center justify-center p-6">
-                <ConnectWalletCTA onConnect={hl.connectWallet} />
+              <div className="flex-1 flex items-center justify-center p-4">
+                <ConnectWalletCTA onOpenModal={() => setWalletModalOpen(true)} />
               </div>
             </div>
           )}
         </div>
       )}
+
+      {/* Wallet selection modal */}
+      {walletModalOpen && <WalletModal onClose={() => setWalletModalOpen(false)} />}
     </div>
   )
 }
