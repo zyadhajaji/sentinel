@@ -159,27 +159,74 @@ function MiniSparkline({ ca, priceChange }: { ca: string; priceChange: number })
 }
 
 // ── Token avatar ──────────────────────────────────────────────────────────────
-function TokenAvatar({ imageUrl, symbol, grade }: { imageUrl: string | null; symbol: string; grade: Signal['score_grade'] }) {
+const GRAD_PALETTE: [string, string][] = [
+  ['#7c3aed', '#a855f7'], // purple
+  ['#00d4ff', '#0066ff'], // cyan-blue
+  ['#00ff88', '#00d4a0'], // green
+  ['#ff8c00', '#ff3355'], // orange-red
+  ['#ffd700', '#ff8c00'], // gold-orange
+  ['#ff3355', '#a855f7'], // red-purple
+  ['#00d4ff', '#7c3aed'], // cyan-purple
+  ['#00ff88', '#00d4ff'], // green-cyan
+]
+
+function tokenGradient(symbol: string, ca: string): [string, string] {
+  const seed = symbol.length >= 2 ? symbol : ca
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) & 0xff
+  return GRAD_PALETTE[h % GRAD_PALETTE.length]!
+}
+
+function TokenAvatar({ imageUrl, symbol, ca, grade }: { imageUrl: string | null; symbol: string; ca: string; grade: Signal['score_grade'] }) {
   const [imgErr, setImgErr] = useState(false)
+  const [imgLoaded, setImgLoaded] = useState(false)
   const cfg = GRADE_CONFIG[grade]
   const initials = symbol.slice(0, 2).toUpperCase()
+  const [c1, c2] = tokenGradient(symbol, ca)
+  const gradId = `grad-${symbol}-${ca}`.replace(/[^a-zA-Z0-9-]/g, '')
+
+  const showImage = !!imageUrl && !imgErr
 
   return (
     <div className="relative shrink-0 w-[44px] h-[44px]">
-      {imageUrl && !imgErr ? (
+      {/* Gradient placeholder — always rendered, fades out once image loads */}
+      <svg
+        width="44"
+        height="44"
+        viewBox="0 0 44 44"
+        className="absolute inset-0"
+        style={{ opacity: showImage && imgLoaded ? 0 : 1, transition: 'opacity 300ms' }}
+      >
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor={c1} />
+            <stop offset="100%" stopColor={c2} />
+          </linearGradient>
+        </defs>
+        <rect width="44" height="44" rx="12" fill={`url(#${gradId})`} />
+        <text
+          x="22"
+          y="22"
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="white"
+          fontWeight="bold"
+          fontSize="14"
+          fontFamily="Inter, sans-serif"
+        >
+          {initials}
+        </text>
+      </svg>
+      {/* Real image — fades in on load */}
+      {showImage && (
         <img
           src={imageUrl}
           alt={symbol}
+          onLoad={() => setImgLoaded(true)}
           onError={() => setImgErr(true)}
-          className="w-[44px] h-[44px] rounded-xl object-cover bg-[#1a1a1a]"
+          className="absolute inset-0 w-[44px] h-[44px] rounded-xl object-cover"
+          style={{ opacity: imgLoaded ? 1 : 0, transition: 'opacity 300ms' }}
         />
-      ) : (
-        <div
-          className="w-[44px] h-[44px] rounded-xl flex items-center justify-center text-[13px] font-bold font-display"
-          style={{ background: `${cfg.color}15`, color: cfg.color, border: `1px solid ${cfg.color}28` }}
-        >
-          {initials}
-        </div>
       )}
       <span
         className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#111111]"
@@ -323,7 +370,7 @@ export function TokenCard({ signal, isNew, onTrade, onDetail, onCall, isCalled }
 
       {/* ── Section A: Main row ─────────────────────────────────────────── */}
       <div className="flex items-start gap-2.5 p-2.5">
-        <TokenAvatar imageUrl={signal.image_url} symbol={signal.token_symbol} grade={signal.score_grade} />
+        <TokenAvatar imageUrl={signal.image_url} symbol={signal.token_symbol} ca={signal.ca} grade={signal.score_grade} />
 
         {/* Center info */}
         <div className="flex-1 min-w-0">

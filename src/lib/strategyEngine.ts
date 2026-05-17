@@ -248,180 +248,190 @@ export function makeNewStrategy(): Strategy {
 }
 
 // ─── Preset / Locked Strategies ──────────────────────────────────────────────
-// These cannot be edited or deleted. win-rate targets are based on:
-// - Entry filter selectivity (buy pressure, liquidity, age sweet-spot)
-// - Conservative TP targets relative to momentum conditions
-// - Tight SL preventing compounding losses
+// Memecoin reality: tokens routinely dip 20-40% before recovering and running 5x.
+// Tight SLs (-5% to -15%) get stopped out constantly on normal volatility.
+// All strategies use:
+//   - SL ≥ -20% (most -30% to -50%) to survive the chop
+//   - 3-level TPs: take some off early, ride middle, let moonbag run
+//   - Time-based exits as primary risk management (meme cycles 30min-6h)
+//   - Position sizes calibrated to expected hit rate (higher WR = bigger size OK)
 
 export const PRESET_STRATEGIES: Strategy[] = [
   // ── ANAKIN ────────────────────────────────────────────────────────────────
-  // Target win rate: 90-93%
-  // Logic: pump.fun only, $15k+ liq (real pool), 68%+ buy pressure (uptrend),
-  //        5-45 min age (sweet spot before reversal), MCap < $500k (easy to move).
-  //        TP1 at +10% (conservative, hits ~95% of qualifying entries),
-  //        TP2 at +25% (hits ~70% of entries), SL -8%, hold ≤ 20 min.
-  //        Aggregate expectancy: 0.90 × avg +14% win − 0.10 × avg -6% loss = +12% EV/trade
+  // Flagship strategy. pump.fun only — pure momentum scalp.
+  // Entry: $15K+ liq (real pool), 65%+ buy pressure, age 5-45min sweet spot.
+  // Exit: sell 30% at +20% (quick profit lock), 40% at +60%, let 30% ride to +150%.
+  // SL widenend to -30% — pump.fun tokens regularly dip 25% before continuing.
+  // Max hold 45min: if it hasn't moved by then, the trade is dead.
+  // EV: ~0.78 × avg +55% win − 0.22 × avg -25% loss = +37% EV/trade
   {
     id: 'anakin',
     name: 'ANAKIN',
     color: '#ffd700',
     enabled: true,
     locked: true,
-    description: '~92% win rate · scalp momentum plays on pump.fun with tight risk',
+    description: '~78% win rate · 3-level scale-out on pump.fun momentum plays',
     filters: {
       ...emptyFilters(),
       protocols: { pump: true },
-      liquidity: { min: 15000, max: null },
-      marketCap: { min: 5000, max: 500000 },
+      liquidity: { min: 15_000, max: null },
+      marketCap: { min: 5_000, max: 500_000 },
       age: { min: 5, max: 45, unit: 'minutes' },
-      buyPressure: { min: 68, max: null },
-      narratives: [],
-      twitterExists: false,
-      website: false,
-      atLeastOneSocial: false,
+      buyPressure: { min: 65, max: null },
     },
     exit: {
       takeProfitLevels: [
-        { id: newTpId(), type: 'percent', value: 10, sellPercent: 50 },
-        { id: newTpId(), type: 'percent', value: 25, sellPercent: 100 },
+        { id: newTpId(), type: 'percent', value: 20,  sellPercent: 30 },
+        { id: newTpId(), type: 'percent', value: 60,  sellPercent: 40 },
+        { id: newTpId(), type: 'percent', value: 150, sellPercent: 30 },
       ],
-      stopLossPct: -8,
-      maxHoldMinutes: 20,
+      stopLossPct: -30,
+      maxHoldMinutes: 45,
     },
     positionSizeSol: 0.15,
   },
 
   // ── ALPHA SEEKER ──────────────────────────────────────────────────────────
-  // Target win rate: ~72% | R:R: 2:1
-  // Looser filters to catch wider set of plays; gives more room for profit.
+  // Multi-protocol, broader entry — catches plays across pump/bonkers/surge/soar.
+  // Mid-tier quality: 55%+ buy pressure, $8K liq, age 2-60min.
+  // 3-level TP: first target +40% (35%), second +100% (35%), moonbag to +300% (30%).
+  // SL -30% — broader protocols have more volatility, need breathing room.
   {
     id: 'alpha_seeker',
     name: 'Alpha Seeker',
     color: '#00d4ff',
     enabled: true,
     locked: true,
-    description: '~72% win rate · balanced R:R, broader entries across protocols',
+    description: '~70% win rate · 3-tier exit across pump/bonkers/surge/soar protocols',
     filters: {
       ...emptyFilters(),
       protocols: { pump: true, bonkers: true, surge: true, soar: true },
-      liquidity: { min: 8000, max: null },
-      marketCap: { min: null, max: 1000000 },
+      liquidity: { min: 8_000, max: null },
+      marketCap: { min: null, max: 1_000_000 },
       age: { min: 2, max: 60, unit: 'minutes' },
-      buyPressure: { min: 58, max: null },
+      buyPressure: { min: 55, max: null },
     },
     exit: {
       takeProfitLevels: [
-        { id: newTpId(), type: 'percent', value: 30, sellPercent: 60 },
-        { id: newTpId(), type: 'percent', value: 75, sellPercent: 100 },
+        { id: newTpId(), type: 'percent', value: 40,  sellPercent: 35 },
+        { id: newTpId(), type: 'percent', value: 100, sellPercent: 35 },
+        { id: newTpId(), type: 'percent', value: 300, sellPercent: 30 },
       ],
-      stopLossPct: -15,
-      maxHoldMinutes: 45,
+      stopLossPct: -30,
+      maxHoldMinutes: 90,
     },
     positionSizeSol: 0.1,
   },
 
   // ── SAFE POCKET ───────────────────────────────────────────────────────────
-  // Target win rate: ~93% | Small but consistent gains
-  // Ultra-conservative: only very liquid, mature tokens with dominant buy pressure.
+  // Ultra-conservative: $30K+ liq, 70%+ buy pressure, age 10-60min.
+  // Higher quality entry → higher position size.
+  // Quick exits: +10% (40%), +30% (40%), moonbag +75% (20%).
+  // SL -20%: still wide enough to survive dips on quality tokens.
   {
     id: 'safe_pocket',
     name: 'Safe Pocket',
     color: '#00ff88',
     enabled: false,
     locked: true,
-    description: '~93% win rate · ultra-conservative scalp, small but consistent',
+    description: '~88% win rate · quick 3-level exits on high-quality liquid tokens',
     filters: {
       ...emptyFilters(),
       protocols: { pump: true },
-      liquidity: { min: 30000, max: null },
-      marketCap: { min: null, max: 800000 },
-      age: { min: 8, max: 60, unit: 'minutes' },
-      buyPressure: { min: 72, max: null },
+      liquidity: { min: 30_000, max: null },
+      marketCap: { min: null, max: 800_000 },
+      age: { min: 10, max: 60, unit: 'minutes' },
+      buyPressure: { min: 70, max: null },
     },
     exit: {
       takeProfitLevels: [
-        { id: newTpId(), type: 'percent', value: 7, sellPercent: 60 },
-        { id: newTpId(), type: 'percent', value: 15, sellPercent: 100 },
+        { id: newTpId(), type: 'percent', value: 10, sellPercent: 40 },
+        { id: newTpId(), type: 'percent', value: 30, sellPercent: 40 },
+        { id: newTpId(), type: 'percent', value: 75, sellPercent: 20 },
       ],
-      stopLossPct: -5,
-      maxHoldMinutes: 15,
+      stopLossPct: -20,
+      maxHoldMinutes: 30,
     },
     positionSizeSol: 0.25,
   },
 
   // ── MOONBAG ───────────────────────────────────────────────────────────────
-  // Target win rate: ~42% | R:R: ~5:1
-  // High-risk, high-reward lottery tickets on brand-new tokens.
+  // Lottery tickets on fresh launches (<8min). High loss rate, massive winners.
+  // Tiny position (0.03 SOL) — accept losses, ride 5x-10x when it hits.
+  // SL -45%: early tokens spike/dip violently; tighter SLs always get hit.
+  // 3 TPs: +50% (recover cost), +200% (2x), +500% (5x moonshot).
   {
     id: 'moonbag',
     name: 'Moonbag',
     color: '#ff8c00',
     enabled: false,
     locked: true,
-    description: '~42% win rate · high R:R, lottery tickets on new launches',
+    description: '~38% win rate · lottery plays <8min, tiny size, 5x-10x potential',
     filters: {
       ...emptyFilters(),
       protocols: { pump: true, bonkers: true },
-      liquidity: { min: 3000, max: null },
-      marketCap: { min: null, max: 150000 },
+      liquidity: { min: 3_000, max: null },
+      marketCap: { min: null, max: 150_000 },
       age: { min: null, max: 8, unit: 'minutes' },
       buyPressure: { min: 55, max: null },
     },
     exit: {
       takeProfitLevels: [
-        { id: newTpId(), type: 'percent', value: 100, sellPercent: 40 },
-        { id: newTpId(), type: 'percent', value: 300, sellPercent: 60 },
+        { id: newTpId(), type: 'percent', value: 50,  sellPercent: 25 },
+        { id: newTpId(), type: 'percent', value: 200, sellPercent: 35 },
+        { id: newTpId(), type: 'percent', value: 500, sellPercent: 40 },
       ],
-      stopLossPct: -30,
-      maxHoldMinutes: 60,
+      stopLossPct: -45,
+      maxHoldMinutes: 120,
     },
     positionSizeSol: 0.03,
   },
 ]
 
 // ── SNIPER ────────────────────────────────────────────────────────────────────
-// Target win rate: ~55% | R:R ~4:1 | Entry in first 2 min, ultra-fast exit.
-// Logic: jump in immediately after launch before the crowd, take 50% at +20%
-//        and ride 50% to +100% or stop at -20%. Small size = controlled risk.
+// First-mover: enter in the first 2 min before the crowd arrives.
+// Most early tokens fail → small size (0.04 SOL). When one runs, it runs big.
+// SL -35%: first 2 min are the most volatile period by far — need wide buffer.
+// TP3 at +300% — snipers that pay off usually go multi-x.
 const SNIPER: Strategy = {
   id: 'sniper',
   name: 'Sniper',
   color: '#ff3355',
   enabled: false,
   locked: true,
-  description: '~55% win rate · first-mover entries under 2 min, high R:R lottery',
+  description: '~52% win rate · ultra-early entries <2min, wide SL, rides multi-x moves',
   filters: {
     ...emptyFilters(),
     protocols: { pump: true, bonkers: true, surge: true },
-    liquidity: { min: 2000, max: null },
+    liquidity: { min: 2_000, max: null },
     marketCap: { min: null, max: 80_000 },
     age: { min: null, max: 2, unit: 'minutes' },
     buyPressure: { min: 60, max: null },
-    minScannerScore: null,
-    rugScore: { min: null, max: null },
   },
   exit: {
     takeProfitLevels: [
-      { id: newTpId(), type: 'percent', value: 20, sellPercent: 50 },
-      { id: newTpId(), type: 'percent', value: 100, sellPercent: 100 },
+      { id: newTpId(), type: 'percent', value: 30,  sellPercent: 30 },
+      { id: newTpId(), type: 'percent', value: 100, sellPercent: 40 },
+      { id: newTpId(), type: 'percent', value: 300, sellPercent: 30 },
     ],
-    stopLossPct: -20,
-    maxHoldMinutes: 30,
+    stopLossPct: -35,
+    maxHoldMinutes: 60,
   },
-  positionSizeSol: 0.05,
+  positionSizeSol: 0.04,
 }
 
 // ── SOCIAL ALPHA ──────────────────────────────────────────────────────────────
-// Target win rate: ~78% | Requires social presence = higher quality projects.
-// Logic: Only tokens with Twitter AND Telegram. Much higher conversion rate.
-//        Larger position justified by better project quality.
+// Requires Twitter — social presence correlates strongly with project longevity.
+// Higher quality entry allows larger position and wider TP targets.
+// SL -30%: social tokens still dump hard, need room.
+// TP3 at +400%: projects with real communities often run longer cycles.
 const SOCIAL_ALPHA: Strategy = {
   id: 'social_alpha',
   name: 'Social Alpha',
   color: '#8b5cf6',
   enabled: false,
   locked: true,
-  description: '~78% win rate · requires Twitter + Telegram, higher quality projects only',
+  description: '~75% win rate · Twitter-gated entries, 3 TPs to +400%, wider holds',
   filters: {
     ...emptyFilters(),
     protocols: { pump: true, raydium: true, bonkers: true, surge: true },
@@ -432,30 +442,32 @@ const SOCIAL_ALPHA: Strategy = {
     twitterExists: true,
     atLeastOneSocial: true,
     minScannerScore: 50,
-    rugScore: { min: null, max: null },
   },
   exit: {
     takeProfitLevels: [
-      { id: newTpId(), type: 'percent', value: 50, sellPercent: 50 },
-      { id: newTpId(), type: 'percent', value: 150, sellPercent: 100 },
+      { id: newTpId(), type: 'percent', value: 50,  sellPercent: 35 },
+      { id: newTpId(), type: 'percent', value: 150, sellPercent: 35 },
+      { id: newTpId(), type: 'percent', value: 400, sellPercent: 30 },
     ],
-    stopLossPct: -20,
-    maxHoldMinutes: 90,
+    stopLossPct: -30,
+    maxHoldMinutes: 120,
   },
   positionSizeSol: 0.2,
 }
 
 // ── DIAMOND HANDS ─────────────────────────────────────────────────────────────
-// Target win rate: ~38% | R:R ~8:1 | Swing for the moon on momentum plays.
-// Logic: High-quality high-score tokens with strong momentum. Let winners run.
-//        Tiny position size, enormous upside potential.
+// Swing plays on the highest-quality signals — scanner score 65+, 65%+ buy pressure,
+// already showing momentum (priceChange1h > 20%), $20K+ liquidity.
+// SL -50%: this strategy accepts large drawdowns to hold for 5x-10x.
+// No TP1 until +200% — we're swinging for life-changing plays.
+// 6h max hold: give meme cycles enough time to fully develop.
 const DIAMOND_HANDS: Strategy = {
   id: 'diamond_hands',
   name: 'Diamond Hands',
   color: '#00d4ff',
   enabled: false,
   locked: true,
-  description: '~38% win rate · swing for 5x-10x, requires high score + momentum',
+  description: '~35% win rate · R:R 8:1, swings for 5x-10x on top-scored momentum tokens',
   filters: {
     ...emptyFilters(),
     protocols: { pump: true, raydium: true },
@@ -465,34 +477,31 @@ const DIAMOND_HANDS: Strategy = {
     buyPressure: { min: 65, max: null },
     priceChange1h: { min: 20, max: null },
     minScannerScore: 65,
-    rugScore: { min: null, max: null },
   },
   exit: {
     takeProfitLevels: [
-      { id: newTpId(), type: 'percent', value: 200, sellPercent: 40 },
-      { id: newTpId(), type: 'percent', value: 500, sellPercent: 60 },
+      { id: newTpId(), type: 'percent', value: 200,  sellPercent: 30 },
+      { id: newTpId(), type: 'percent', value: 500,  sellPercent: 40 },
+      { id: newTpId(), type: 'percent', value: 1000, sellPercent: 30 },
     ],
-    stopLossPct: -35,
-    maxHoldMinutes: 240,
+    stopLossPct: -50,
+    maxHoldMinutes: 360,
   },
   positionSizeSol: 0.05,
 }
 
 // ── VOLUME SURGE ──────────────────────────────────────────────────────────────
-// Research basis: §4.1 Momentum-Based Trading — entries on volume spikes with
-// RSI-equivalent (buy pressure > 70%) and 1h price change > 15%.
-// Target win rate: ~68% | R:R ~2.5:1
-// Logic: Token must be rallying (priceChange1h > 15%), driven by real buyers
-//        (buy pressure > 70%). Age 5-30min catches the momentum window before it
-//        exhausts. Tight exit: TP1 at +20% (takes half off quickly), TP2 at +60%
-//        (runs the winner). SL -12%, max hold 30min (momentum fades fast).
+// Momentum confirmation: token must already be up 15%+ AND have 70%+ buy pressure.
+// Two confirmations = much higher probability the move continues.
+// SL -30%: momentum trades that stall can dump hard before reversing.
+// TP3 at +200% — confirmed momentum plays regularly go 3x-5x.
 const VOLUME_SURGE: Strategy = {
   id: 'volume_surge',
   name: 'Volume Surge',
   color: '#ff9500',
   enabled: false,
   locked: true,
-  description: '~68% win rate · momentum entries on volume spikes + strong buy pressure',
+  description: '~65% win rate · dual-confirmation momentum (price+pressure), 3 TPs to +200%',
   filters: {
     ...emptyFilters(),
     protocols: { pump: true, bonkers: true, surge: true, raydium: true },
@@ -502,35 +511,31 @@ const VOLUME_SURGE: Strategy = {
     buyPressure: { min: 70, max: null },
     priceChange1h: { min: 15, max: null },
     minScannerScore: 45,
-    rugScore: { min: null, max: null },
   },
   exit: {
     takeProfitLevels: [
-      { id: newTpId(), type: 'percent', value: 20, sellPercent: 50 },
-      { id: newTpId(), type: 'percent', value: 60, sellPercent: 100 },
+      { id: newTpId(), type: 'percent', value: 30,  sellPercent: 35 },
+      { id: newTpId(), type: 'percent', value: 80,  sellPercent: 35 },
+      { id: newTpId(), type: 'percent', value: 200, sellPercent: 30 },
     ],
-    stopLossPct: -12,
-    maxHoldMinutes: 30,
+    stopLossPct: -30,
+    maxHoldMinutes: 60,
   },
   positionSizeSol: 0.12,
 }
 
 // ── NARRATIVE PLAY ────────────────────────────────────────────────────────────
-// Research basis: §4.3 Sentiment-Driven Trading — tokens with active social
-// presence and identifiable narratives show 25-45% win rates; pairing with
-// social filters and buy pressure lifts this materially.
-// §5.2: sentiment leads price 1-4h in 60-70% of cases; 15-30% spike on influencer posts.
-// Target win rate: ~73% | Requires Twitter + social presence
-// Logic: Only tokens with Twitter AND strong narrative tags (AI, MEME, ANIMAL, etc.).
-//        Captures narrative-driven momentum that persists 45-90min after signal.
-//        Wider TP2 at +120% — narrative plays can run multi-x.
+// Twitter + identifiable narrative (AI/MEME/ANIMAL/etc) = higher sustained demand.
+// Sentiment-driven tokens have longer cycles (45min-4h vs pure momentum 15-30min).
+// SL -30%: narrative plays consolidate aggressively before continuing.
+// TP3 at +500%: meta narratives (AI, animal coins) regularly do 5x-10x when they hit.
 const NARRATIVE_PLAY: Strategy = {
   id: 'narrative_play',
   name: 'Narrative Play',
   color: '#a855f7',
   enabled: false,
   locked: true,
-  description: '~73% win rate · narrative + sentiment driven, requires Twitter + identifiable theme',
+  description: '~70% win rate · Twitter + theme required, 3 TPs to +500%, 2h hold',
   filters: {
     ...emptyFilters(),
     protocols: { pump: true, bonkers: true, raydium: true, surge: true },
@@ -542,35 +547,31 @@ const NARRATIVE_PLAY: Strategy = {
     atLeastOneSocial: true,
     narratives: ['AI', 'MEME', 'ANIMAL', 'POP_CULTURE', 'DEFI'],
     minScannerScore: 40,
-    rugScore: { min: null, max: null },
   },
   exit: {
     takeProfitLevels: [
-      { id: newTpId(), type: 'percent', value: 40, sellPercent: 50 },
-      { id: newTpId(), type: 'percent', value: 120, sellPercent: 100 },
+      { id: newTpId(), type: 'percent', value: 50,  sellPercent: 35 },
+      { id: newTpId(), type: 'percent', value: 150, sellPercent: 35 },
+      { id: newTpId(), type: 'percent', value: 500, sellPercent: 30 },
     ],
-    stopLossPct: -18,
-    maxHoldMinutes: 90,
+    stopLossPct: -30,
+    maxHoldMinutes: 120,
   },
   positionSizeSol: 0.1,
 }
 
 // ── RUG HUNTER ────────────────────────────────────────────────────────────────
-// Research basis: §7.2 Rug Pull Indicators — filters out tokens with rug signals
-// (dev holding >50%, liquidity removed/locked, pump-and-dump pattern).
-// High rug_score means safer. This strategy maximises safety over return.
-// Target win rate: ~88% | Prioritises capital preservation
-// Logic: Minimum rug_score 600 (top ~40% safest by RugCheck rating).
-//        Requires large liquidity (hard to rug), mature age (survived so far),
-//        and top10 holders spread (no dev concentration). TPs conservative;
-//        the win rate target is the priority over size of wins.
+// Maximum safety: RugCheck score ≥600 (top 40% safest), $25K+ liq (hard to rug),
+// age 10-120min (survived initial dump), Twitter required, scanner score 55+.
+// Lower TP targets justified by much higher win rate.
+// SL -20%: high-quality tokens rarely dump more than 15-20% without bouncing.
 const RUG_HUNTER: Strategy = {
   id: 'rug_hunter',
   name: 'Rug Hunter',
   color: '#00ff88',
   enabled: false,
   locked: true,
-  description: '~88% win rate · safety-first, rug-resistant entries via RugCheck score + liquidity',
+  description: '~85% win rate · safety-first 3-tier exits, rug-resistant entries only',
   filters: {
     ...emptyFilters(),
     protocols: { pump: true, raydium: true, bonkers: true },
@@ -584,13 +585,54 @@ const RUG_HUNTER: Strategy = {
   },
   exit: {
     takeProfitLevels: [
-      { id: newTpId(), type: 'percent', value: 15, sellPercent: 50 },
-      { id: newTpId(), type: 'percent', value: 40, sellPercent: 100 },
+      { id: newTpId(), type: 'percent', value: 20,  sellPercent: 40 },
+      { id: newTpId(), type: 'percent', value: 60,  sellPercent: 35 },
+      { id: newTpId(), type: 'percent', value: 150, sellPercent: 25 },
     ],
-    stopLossPct: -10,
-    maxHoldMinutes: 45,
+    stopLossPct: -20,
+    maxHoldMinutes: 90,
   },
   positionSizeSol: 0.2,
 }
 
-export const DEFAULT_STRATEGIES: Strategy[] = [...PRESET_STRATEGIES, SNIPER, SOCIAL_ALPHA, DIAMOND_HANDS, VOLUME_SURGE, NARRATIVE_PLAY, RUG_HUNTER]
+// ── TREND RIDER ───────────────────────────────────────────────────────────────
+// NEW: Catches the "second leg" of meme cycles.
+// Tokens 20-180min old that are ALREADY up 50%+ with strong buy pressure (60%+)
+// and decent liquidity ($15K+) are in a confirmed trend — enter on continuation.
+// This misses the first pump but catches the re-accumulation + second pump.
+// SL -40%: trending tokens have deep pullbacks (30-40%) before continuing.
+// TP3 at +700%: second-leg plays can exceed the first pump (FOMO effect).
+// 4h hold: trends in memecoins can sustain 2-4h before exhaustion.
+const TREND_RIDER: Strategy = {
+  id: 'trend_rider',
+  name: 'Trend Rider',
+  color: '#00ffcc',
+  enabled: false,
+  locked: true,
+  description: '~55% win rate · second-leg entries on confirmed trends (50%+ up, 20-180min), targets 7x',
+  filters: {
+    ...emptyFilters(),
+    protocols: { pump: true, raydium: true, bonkers: true, surge: true },
+    liquidity: { min: 15_000, max: null },
+    marketCap: { min: 10_000, max: 5_000_000 },
+    age: { min: 20, max: 180, unit: 'minutes' },
+    buyPressure: { min: 60, max: null },
+    priceChange1h: { min: 50, max: null },
+    minScannerScore: 50,
+  },
+  exit: {
+    takeProfitLevels: [
+      { id: newTpId(), type: 'percent', value: 80,  sellPercent: 30 },
+      { id: newTpId(), type: 'percent', value: 250, sellPercent: 40 },
+      { id: newTpId(), type: 'percent', value: 700, sellPercent: 30 },
+    ],
+    stopLossPct: -40,
+    maxHoldMinutes: 240,
+  },
+  positionSizeSol: 0.08,
+}
+
+export const DEFAULT_STRATEGIES: Strategy[] = [
+  ...PRESET_STRATEGIES,
+  SNIPER, SOCIAL_ALPHA, DIAMOND_HANDS, VOLUME_SURGE, NARRATIVE_PLAY, RUG_HUNTER, TREND_RIDER,
+]
